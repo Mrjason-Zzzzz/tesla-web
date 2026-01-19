@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Player Core</title>
+    <title>Player Core Watchdog</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
         #mse { width: 100%; height: 100%; }
         
-        /* 启动遮罩 */
         #start-mask {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.9); z-index: 999;
@@ -21,7 +20,15 @@
             color: white; font-size: 40px; box-shadow: 0 0 30px rgba(229,9,20,0.6);
             margin-bottom: 20px;
         }
-        .status { color: #aaa; font-family: monospace; font-size: 12px; }
+        .status { color: #aaa; font-family: monospace; font-size: 12px; text-align: center; padding: 0 20px;}
+        /* 倒计时条 */
+        .loader-bar {
+            width: 200px; height: 4px; background: #333; margin-top: 10px; border-radius: 2px; overflow: hidden;
+            display: none;
+        }
+        .loader-fill {
+            height: 100%; background: #E50914; width: 0%; transition: width 0.2s linear;
+        }
     </style>
     <script src="//unpkg.com/xgplayer@2.31.6/browser/index.js"></script>
     <script src="//unpkg.com/xgplayer-hls@2.5.2/dist/index.min.js"></script>
@@ -30,84 +37,129 @@
 
     <div id="start-mask" onclick="init()">
         <div class="play-btn">▶</div>
-        <div class="status" id="log">点击启动 (Vercel纯静态版)</div>
+        <div class="status" id="log">点击启动 (智能切线版)</div>
+        <div class="loader-bar" id="bar-box"><div class="loader-fill" id="bar"></div></div>
     </div>
     
     <div id="mse"></div>
 
     <script>
         const logDiv = document.getElementById('log');
+        const bar = document.getElementById('bar');
+        const barBox = document.getElementById('bar-box');
+        
         function log(msg) { logDiv.innerText = msg; console.log(msg); }
 
         // --- 视频源 ---
         const RAW_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
         
-        // --- 免费公共代理池 ---
-        // 代替 PHP 服务器的功能，解决跨域
+        // --- 线路池 ---
         const PROXIES = [
-            "", // 1. 第0路：尝试直连 (有些资源站支持跨域，速度最快)
-            "https://corsproxy.io/?", // 2. 第1路：CorsProxy (稳定)
-            "https://api.allorigins.win/raw?url=" // 3. 第2路：AllOrigins (备用)
+            "",                        // 线路1: 直连 (速度最快，但易卡住)
+            "https://corsproxy.io/?",  // 线路2: 专用代理 (最稳)
+            "https://api.codetabs.com/v1/proxy?quest=" // 线路3: 备用代理
         ];
         
         let player = null;
+        let watchdogTimer = null; // 看门狗计时器
+        let progressInterval = null;
 
         function init() {
             tryPlay(0);
         }
 
-        // 递归尝试线路
         function tryPlay(index) {
+            // 1. 如果所有线路都试完了
             if (index >= PROXIES.length) {
-                log("❌ 所有线路均失败，请检查源是否失效");
+                log("❌ 全军覆没：所有线路均无法播放。\n请检查源链接是否失效。");
+                barBox.style.display = 'none';
                 return;
             }
 
+            // 2. 准备当前线路
             const prefix = PROXIES[index];
-            // 如果是代理模式，需要把原链接编码
             const finalUrl = prefix ? (prefix + encodeURIComponent(RAW_URL)) : RAW_URL;
-            
             const modeName = prefix ? "代理模式" : "直连模式";
-            log(`尝试线路 ${index+1}: ${modeName}...`);
+            
+            log(`正在尝试线路 ${index+1}/${PROXIES.length}: ${modeName}...\n(5秒无反应将强制切换)`);
+            barBox.style.display = 'block';
+            bar.style.width = '0%';
 
-            if (player) player.destroy(); // 销毁旧实例
+            // 3. 销毁旧实例
+            if (player) {
+                try { player.destroy(); } catch(e){}
+            }
 
-            player = new window.HlsJsPlayer({
-                id: 'mse',
-                url: finalUrl,
-                playsinline: true,
-                whitelist: [''],
-                autoplay: true,
-                fluid: true,
-                fitVideoSize: 'contain',
-                volume: 1.0,
+            // 4. 【核心】启动看门狗 (5秒倒计时)
+            clearTimers(); // 清理旧定时器
+            let progress = 0;
+            // 进度条动画
+            progressInterval = setInterval(() => {
+                progress += 2; // 50ms * 100 = 5000ms
+                if(progress > 100) progress = 100;
+                bar.style.width = progress + '%';
+            }, 50); // 每50ms更新一次
+            
+            // 5秒后强制判死刑
+            watchdogTimer = setTimeout(() => {
+                console.warn(`线路 ${index+1} 超时，强制切换`);
+                switchNext(index, "连接超时");
+            }, 5000);
+
+            // 5. 初始化播放器
+            try {
+                player = new window.HlsJsPlayer({
+                    id: 'mse',
+                    url: finalUrl,
+                    playsinline: true,
+                    whitelist: [''],
+                    autoplay: true,
+                    fluid: true,
+                    fitVideoSize: 'contain',
+                    volume: 1.0,
+                    useHls: true,
+                    hlsOpts: {
+                        enableWorker: true,
+                        // 代理模式下禁用凭证，防止跨域报错
+                        xhrSetup: function(xhr) { if(prefix) xhr.withCredentials = false; }
+                    },
+                    ignores: ['fullscreen', 'rotate']
+                });
+
+                // 6. 监听成功信号
+                player.once('playing', () => {
+                    clearTimers(); // 解除警报
+                    document.getElementById('start-mask').style.display = 'none';
+                    console.log('播放成功');
+                });
                 
-                // 核心：开启 MSE 硬解
-                useHls: true,
-                hlsOpts: {
-                    enableWorker: true,
-                    // 关键：如果走代理，不需要 withCredentials，否则会报错
-                    xhrSetup: function(xhr, url) {
-                        xhr.withCredentials = false;
-                    }
-                },
-                ignores: ['fullscreen', 'cssFullscreen', 'rotate']
-            });
+                // 监听加载事件(辅助判断)
+                player.once('complete', () => { clearTimers(); }); 
 
-            // 监听成功：一旦播放，就隐藏遮罩
-            player.once('playing', () => {
-                document.getElementById('start-mask').style.display = 'none';
-                console.log('播放成功，当前线路有效');
-            });
+                // 7. 监听错误信号 (如果报错比超时快)
+                player.once('error', (e) => {
+                    console.log('捕获错误', e);
+                    switchNext(index, "加载错误");
+                });
 
-            // 监听错误：如果当前线路不行，自动切下一条
-            player.once('error', (e) => {
-                console.log('线路失败', e);
-                log(`线路 ${index+1} 失败，自动切换...`);
-                setTimeout(() => {
-                    tryPlay(index + 1); // 递归尝试下一条
-                }, 1500);
-            });
+            } catch(e) {
+                switchNext(index, "初始化异常");
+            }
+        }
+
+        function switchNext(currentIndex, reason) {
+            clearTimers(); // 停掉当前的计时器
+            log(`线路 ${currentIndex+1} 失败 (${reason})，正在切换...`);
+            
+            // 延迟1秒后试下一条，给用户看一眼提示
+            setTimeout(() => {
+                tryPlay(currentIndex + 1);
+            }, 1000);
+        }
+
+        function clearTimers() {
+            if(watchdogTimer) clearTimeout(watchdogTimer);
+            if(progressInterval) clearInterval(progressInterval);
         }
     </script>
 </body>
