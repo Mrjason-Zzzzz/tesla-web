@@ -6,12 +6,9 @@
     <title>Tesla Cinema</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
-        /* 全屏 Iframe，模拟 xxiptv 的结构 */
+        /* 全屏无边框 Iframe */
         #app-frame {
-            width: 100vw;
-            height: 100vh;
-            border: none;
-            display: block;
+            width: 100vw; height: 100vh; border: none; display: block;
         }
     </style>
 </head>
@@ -21,13 +18,13 @@
 
     <script>
         // 你的测试源
-        const TARGET_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
+        const MY_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
         
         const frame = document.getElementById('app-frame');
         
-        // 拼接地址：加载同目录下的 player.html，并把视频地址传过去
-        // 加上时间戳防止缓存
-        frame.src = `player.html?t=${Date.now()}&url=${encodeURIComponent(TARGET_URL)}`;
+        // 加载播放器核心，并传入视频地址
+        // 加个随机数 t=... 防止车机缓存旧代码
+        frame.src = `player.html?t=${Date.now()}&url=${encodeURIComponent(MY_URL)}`;
     </script>
 
 </body>
