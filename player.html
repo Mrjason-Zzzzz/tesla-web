@@ -1,79 +1,71 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Player Core</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body, html { width: 100%; height: 100%; background: #000; overflow: hidden; }
-        #mse { width: 100%; height: 100%; }
-        
-        /* 启动遮罩：必须手动点击一次，骗过浏览器的自动播放策略 */
-        #start-mask {
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+        #mse { width: 100%; height: 100%; background: #000; }
+        /* 巨大的启动按钮，防止自动播放策略拦截 */
+        #start-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.8); z-index: 999;
-            display: flex; align-items: center; justify-content: center; cursor: pointer;
-        }
-        .play-btn {
-            width: 80px; height: 80px; background: #E50914; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 40px; box-shadow: 0 0 20px rgba(229,9,20,0.5);
+            cursor: pointer;
+        }
+        .play-icon {
+            font-size: 80px; color: #E50914; border: 4px solid #E50914;
+            border-radius: 50%; width: 120px; height: 120px;
+            display: flex; align-items: center; justify-content: center;
         }
     </style>
-    <script src="//unpkg.com/xgplayer@2.31.6/browser/index.js"></script>
-    <script src="//unpkg.com/xgplayer-hls@2.5.2/dist/index.min.js"></script>
+    <script src="//unpkg.com/xgplayer@2.31.6/browser/index.js" charset="utf-8"></script>
+    <script src="//unpkg.com/xgplayer-hls@2.5.2/dist/index.min.js" charset="utf-8"></script>
 </head>
 <body>
 
-    <div id="start-mask" onclick="init()">
-        <div class="play-btn">▶</div>
+    <div id="start-layer" onclick="start()">
+        <div class="play-icon">▶</div>
     </div>
     
     <div id="mse"></div>
 
     <script>
-        // 获取 URL 参数，如果没有则使用你提供的测试源
+        // 获取 URL 中的 m3u8 地址
         const params = new URLSearchParams(window.location.search);
-        const TEST_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
-        const url = params.get('url') || TEST_URL;
+        // 默认测试源
+        const DEFAULT_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
+        const url = params.get('url') || DEFAULT_URL;
 
-        function init() {
-            document.getElementById('start-mask').style.display = 'none';
+        let player = null;
+
+        function start() {
+            document.getElementById('start-layer').style.display = 'none';
             
-            // 实例化播放器
-            let player = new window.HlsJsPlayer({
+            // 初始化西瓜播放器
+            player = new window.HlsJsPlayer({
                 id: 'mse',
                 url: url,
-                playsinline: true,      // 必须：防止被系统劫持全屏
-                autoplay: true,         // 点击遮罩后自动播放
-                fluid: true,            // 填满容器
-                fitVideoSize: 'contain',
+                playsinline: true,
+                whitelist: [''],
+                autoplay: true,
+                fitVideoSize: 'auto',
+                fluid: true,
                 volume: 1.0,
-                
-                // 核心黑科技：开启 MSE (Media Source Extensions)
-                // 这会将视频切片成数据流喂给浏览器，特斯拉很难拦截这种 Blob 数据
+                // 核心：开启 MSE，绕过原生 Video 检测
                 useHls: true,
                 hlsOpts: {
-                    enableWorker: true // 开启多线程解码
+                    enableWorker: true
                 },
-                
-                // 关键配置：禁用原生全屏，防止触发 D 档检测
-                ignores: ['fullscreen', 'cssFullscreen', 'rotate', 'playbackRate'],
-                
-                // 允许跨域
-                cors: true
+                // 移除所有可能触发全屏的控件
+                ignores: ['fullscreen', 'cssFullscreen', 'rotate']
             });
 
-            // 错误自动重试
-            player.on('error', () => {
-                console.log('解码错误，尝试重连...');
+            player.on('error', (e) => {
+                console.log('Error', e);
+                // 错误自动恢复
                 player.reload();
-            });
-            
-            // 循环播放防止停止
-            player.on('ended', () => {
-                player.play();
             });
         }
     </script>
