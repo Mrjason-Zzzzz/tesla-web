@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="referrer" content="no-referrer">
+    <title>Tesla Pro Player</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    
+    <style>
+        /* --- 特斯拉深色主题 --- */
+        :root { --bg: #000; --side: #111; --card: #1c1c1c; --accent: #E50914; --text: #eee; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html { zoom: 0.85; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; height: 100vh; overflow: hidden; display: flex; }
+
+        /* 布局 */
+        .sidebar { width: 80px; background: var(--side); display: flex; flex-direction: column; align-items: center; padding-top: 30px; border-right: 1px solid #333; z-index: 20; flex-shrink: 0; }
+        .nav-btn { width: 60px; height: 60px; margin-bottom: 15px; border-radius: 12px; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #888; font-size: 10px; cursor: pointer; transition: 0.2s; }
+        .nav-btn i { font-size: 24px; margin-bottom: 5px; }
+        .nav-btn.active { background: #333; color: var(--accent); border-left: 3px solid var(--accent); }
+
+        .main { flex: 1; display: flex; flex-direction: column; position: relative; }
+
+        /* --- 核心播放器 (仿开源项目架构) --- */
+        #player-container { 
+            position: relative; width: 100%; height: 0; background: #000; 
+            transition: height 0.3s; z-index: 50; overflow: hidden;
+        }
+        #player-container.active { height: 50vh; border-bottom: 1px solid #333; }
+        
+        /* D档模式：Canvas 独占 */
+        #player-container.drive-mode { 
+            position: fixed !important; top: 0; left: 0; width: 100vw !important; height: 100vh !important; 
+            z-index: 99999; background: #000;
+        }
+
+        /* 1. 源视频：必须"可见"才能解码，但我们用 Canvas 盖住它 */
+        #source-video { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            opacity: 0.01; /* 关键：不是0，也不是none，欺骗浏览器它在显示 */
+            z-index: 1; 
+            pointer-events: none;
+        }
+        
+        /* 2. 渲染画布：这是用户真正看到的 */
+        #render-canvas { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            z-index: 2; /* 盖在视频上面 */
+            background: #000;
+            object-fit: contain;
+        }
+
+        /* 控制层 */
+        .controls-layer {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 80px;
+            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+            display: flex; align-items: center; padding: 0 30px; gap: 20px;
+            z-index: 100; opacity: 0; transition: 0.3s;
+        }
+        #player-container:hover .controls-layer { opacity: 1; }
+
+        .c-btn { color: white; font-size: 24px; cursor: pointer; width: 40px; text-align: center; }
+        .c-progress { flex: 1; height: 40px; display: flex; align-items: center; cursor: pointer; }
+        .c-track { width: 100%; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; position: relative; }
+        .c-fill { height: 100%; background: var(--accent); width: 0%; border-radius: 2px; }
+        .c-time { font-family: monospace; font-size: 14px; font-weight: bold; }
+
+        /* 行车开关 */
+        .drive-btn {
+            position: absolute; top: 20px; right: 20px; z-index: 200;
+            background: rgba(229, 9, 20, 0.9); color: white; border: none;
+            padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); backdrop-filter: blur(5px);
+        }
+
+        /* 搜索头 */
+        .header { padding: 15px; background: rgba(20,20,20,0.95); display: flex; gap: 15px; align-items: center; border-bottom: 1px solid #333; }
+        .search-box { flex: 1; background: #222; height: 44px; border-radius: 8px; display: flex; padding: 0 15px; align-items: center; border: 1px solid #444; }
+        .search-box input { flex: 1; background: transparent; border: none; color: white; font-size: 16px; height: 100%; }
+        
+        /* 列表 */
+        .content { flex: 1; overflow-y: auto; padding: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px; }
+        .card { background: var(--card); border-radius: 8px; overflow: hidden; cursor: pointer; position: relative; }
+        .poster { padding-bottom: 140%; position: relative; background: #222; }
+        .poster img { position: absolute; width: 100%; height: 100%; object-fit: cover; }
+        .tag { position: absolute; top: 5px; right: 5px; background: var(--accent); font-size: 10px; padding: 2px 6px; border-radius: 4px; }
+        .title { padding: 10px; font-size: 13px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ccc; }
+
+        /* 辅助 */
+        #status { grid-column: 1/-1; text-align: center; padding: 60px; color: #666; }
+        #toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(229, 9, 20, 0.9); padding: 10px 20px; border-radius: 20px; z-index: 300; display: none; font-weight: bold; }
+        
+        /* 手机端 */
+        #phone-ui { display: none; width: 100%; height: 100%; background: #111; flex-direction: column; align-items: center; justify-content: center; }
+        .p-card { width: 85%; background: #222; padding: 30px; border-radius: 20px; text-align: center; }
+        .p-in { width: 100%; padding: 15px; background: #000; border: 1px solid #444; color: #fff; margin: 20px 0; border-radius: 8px; }
+        .p-btn { width: 100%; padding: 15px; background: var(--accent); border: none; color: #fff; border-radius: 8px; font-weight: bold; }
+
+        body.drive-active .sidebar, body.drive-active .header, body.drive-active .content { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="car-ui">
+        <div class="sidebar">
+            <div class="nav-btn active" onclick="switchSrc()"><i class="fas fa-database"></i>切源</div>
+            <div class="nav-btn" onclick="loadList('电影')"><i class="fas fa-film"></i>电影</div>
+            <div class="nav-btn" onclick="loadList('电视剧')"><i class="fas fa-tv"></i>剧集</div>
+            <div class="nav-btn" onclick="openCast()"><i class="fas fa-mobile-alt"></i>投屏</div>
+        </div>
+
+        <div class="main">
+            <div id="player-container">
+                <video id="source-video" playsinline webkit-playsinline crossorigin="anonymous"></video>
+                
+                <canvas id="render-canvas"></canvas>
+                
+                <div class="controls-layer">
+                    <i class="fas fa-play c-btn" id="play-icon" onclick="togglePlay()"></i>
+                    <span class="c-time" id="t-curr">00:00</span>
+                    <div class="c-progress" onclick="seek(event)">
+                        <div class="c-track"><div class="c-fill" id="t-fill"></div></div>
+                    </div>
+                    <span class="c-time" id="t-total">00:00</span>
+                    <i class="fas fa-expand c-btn" onclick="toggleDrive()"></i>
+                </div>
+
+                <button class="drive-btn" onclick="toggleDrive()">
+                    <i class="fas fa-car"></i> 开启 D 档模式
+                </button>
+            </div>
+
+            <div class="header">
+                <div class="search-box">
+                    <span id="src-label" style="color:#00ffcc; font-size:12px; margin-right:10px;">豪华资源</span>
+                    <input type="text" id="kw" placeholder="搜片名 (如: 狂飙)..." onkeypress="if(event.keyCode==13) doSearch()">
+                </div>
+                <div class="nav-btn" style="width:44px; height:44px; margin:0; background:#333;" onclick="doSearch()"><i class="fas fa-search"></i></div>
+            </div>
+
+            <div class="content">
+                <div id="grid" class="grid"></div>
+                <div id="status"><i class="fas fa-circle-notch fa-spin"></i> 正在连接资源库...</div>
+            </div>
+        </div>
+        
+        <div id="cast-layer" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:300; flex-direction:column; align-items:center; justify-content:center;" onclick="this.style.display='none'">
+            <div id="qrcode" style="background:white; padding:15px; border-radius:12px;"></div>
+            <p style="margin-top:20px; color:#aaa;">手机扫码</p>
+        </div>
+    </div>
+
+    <div id="phone-ui">
+        <div class="p-card">
+            <h2 style="color:var(--accent)">Tesla 遥控</h2>
+            <textarea id="p-text" class="p-in" rows="4" placeholder="粘贴链接"></textarea>
+            <button class="p-btn" onclick="sendData()">发送</button>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+<script>
+    // --- 配置池 ---
+    const SOURCES = [
+        { n: "豪华资源", u: "https://hhzyapi.com/api.php/provide/vod/?ac=detail" }, // 推荐：支持CORS
+        { n: "量子资源", u: "https://cj.lziapi.com/api.php/provide/vod/?ac=detail" }, // 推荐：速度快
+        { n: "360资源", u: "https://360zyzz.com/api.php/provide/vod/?ac=detail" }
+    ];
+    const MQTT = "wss://broker.emqx.io:8084/mqtt";
+    const PROXY = "https://corsproxy.io/?";
+
+    // --- 核心变量 ---
+    const video = document.getElementById('source-video');
+    const canvas = document.getElementById('render-canvas');
+    const ctx = canvas.getContext('2d', { alpha: false }); // 性能优化
+    let hls = null;
+    let currSrcIdx = 0;
+    let isDrive = false;
+    let client = null;
+    const ROOM = "tesla_pro_" + Math.random().toString(36).substr(2, 5);
+
+    window.onload = () => {
+        if(new URL(window.location).searchParams.get('mode') === 'remote') {
+            initPhone();
+        } else {
+            initCar();
+        }
+    };
+
+    function initCar() {
+        loadList('热门');
+        connectMqtt(ROOM, true);
+        startRenderEngine(); // 启动引擎
+        // 激活 Web Audio API 保持后台活跃
+        document.addEventListener('click', initAudioContext, { once: true });
+        setInterval(() => { if(!video.paused) document.title = "▶ " + Math.random().toFixed(2); }, 3000);
+    }
+
+    function initAudioContext() {
+        // 创建一个无声的音频上下文，骗过浏览器认为这是"高优先级媒体"
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+            const audioCtx = new AudioContext();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            gain.gain.value = 0.001; // 极小音量
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+        }
+    }
+
+    // --- 1. 渲染引擎 (核心中的核心) ---
+    function startRenderEngine() {
+        const render = () => {
+            if (!video.paused && !video.ended) {
+                // 只要视频没停，就疯狂画图
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            }
+            // 使用 rVFC 获取最佳性能，回退到 rAF
+            if ('requestVideoFrameCallback' in video) {
+                video.requestVideoFrameCallback(render);
+            } else {
+                requestAnimationFrame(render);
+            }
+        };
+        // 启动循环
+        if ('requestVideoFrameCallback' in video) {
+            video.requestVideoFrameCallback(render);
+        } else {
+            requestAnimationFrame(render);
+        }
+
+        // 监听尺寸变化
+        video.addEventListener('loadedmetadata', () => {
+            canvas.width = video.videoWidth || 1280;
+            canvas.height = video.videoHeight || 720;
+            document.getElementById('t-total').innerText = fmtTime(video.duration);
+        });
+
+        // 监听时间
+        video.addEventListener('timeupdate', () => {
+            const pct = (video.currentTime / video.duration) * 100;
+            document.getElementById('t-fill').style.width = pct + '%';
+            document.getElementById('t-curr').innerText = fmtTime(video.currentTime);
+        });
+
+        video.addEventListener('play', () => document.getElementById('play-icon').className = 'fas fa-pause c-btn');
+        video.addEventListener('pause', () => document.getElementById('play-icon').className = 'fas fa-play c-btn');
+        
+        // 错误重试
+        video.addEventListener('error', () => {
+            showToast('播放出错，请切换资源库');
+        });
+    }
+
+    // --- 2. 播放逻辑 ---
+    function play(url) {
+        document.getElementById('player-container').classList.add('active');
+        
+        if(hls) hls.destroy();
+
+        if(Hls.isSupported() && url.includes('m3u8')) {
+            hls = new Hls({
+                enableWorker: true,
+                xhrSetup: xhr => { xhr.withCredentials = false; } // 允许跨域
+            });
+            hls.loadSource(url);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                video.play().catch(e => showToast('请点击播放'));
+            });
+        } else {
+            video.src = url;
+            video.play();
+        }
+        showToast('正在缓冲...');
+    }
+
+    // --- 3. D档模式 ---
+    function toggleDrive() {
+        isDrive = !isDrive;
+        const box = document.getElementById('player-container');
+        if(isDrive) {
+            document.body.classList.add('drive-active');
+            box.classList.add('drive-mode');
+            showToast('行车模式已开启');
+            // 强制全屏重绘
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        } else {
+            document.body.classList.remove('drive-active');
+            box.classList.remove('drive-mode');
+        }
+    }
+
+    // --- 资源 & 交互 ---
+    async function loadList(wd) {
+        const grid = document.getElementById('grid');
+        const status = document.getElementById('status');
+        grid.innerHTML = '';
+        status.style.display = 'block';
+        
+        // 优先直连，失败走代理
+        try {
+            const api = SOURCES[currSrcIdx].u + "&wd=" + encodeURIComponent(wd);
+            const res = await fetch(api);
+            const data = await res.json();
+            status.style.display = 'none';
+            if(data.list) render(data.list); else status.innerText = '未找到';
+        } catch(e) {
+            // 走代理
+            try {
+                const api = PROXY + encodeURIComponent(SOURCES[currSrcIdx].u + "&wd=" + wd);
+                const res = await fetch(api);
+                const data = await res.json();
+                status.style.display = 'none';
+                if(data.list) render(data.list);
+            } catch(err) { status.innerText = '连接失败，请切源'; }
+        }
+    }
+
+    function render(list) {
+        const grid = document.getElementById('grid');
+        list.forEach(v => {
+            const d = document.createElement('div');
+            d.className = 'card';
+            d.innerHTML = `<div class="poster"><img src="${v.vod_pic}" onerror="this.style.opacity=0.3"><span class="tag">${v.vod_remarks||'HD'}</span></div><div class="title">${v.vod_name}</div>`;
+            d.onclick = () => parseEp(v);
+            grid.appendChild(d);
+        });
+    }
+
+    function parseEp(v) {
+        let playStr = v.vod_play_url;
+        if(playStr.includes('m3u8')) {
+            if(playStr.includes('$$$')) playStr = playStr.split('$$$').find(s => s.includes('m3u8')) || playStr.split('$$$')[0];
+        } else { playStr = playStr.split('$$$')[0]; }
+        
+        const url = playStr.split('#')[0].split('$')[1] || playStr.split('#')[0].split('$')[0];
+        play(url);
+    }
+
+    function switchSrc() {
+        currSrcIdx = (currSrcIdx + 1) % SOURCES.length;
+        document.getElementById('src-label').innerText = SOURCES[currSrcIdx].n;
+        loadList('热门');
+        showToast('已切换至: ' + SOURCES[currSrcIdx].n);
+    }
+    
+    function togglePlay() { video.paused ? video.play() : video.pause(); }
+    function seek(e) { 
+        const rect = e.currentTarget.getBoundingClientRect();
+        video.currentTime = (e.clientX - rect.left) / rect.width * video.duration;
+    }
+    function fmtTime(s) { if(!s) return '00:00'; return `${Math.floor(s/60)}:${Math.floor(s%60)<10?'0'+Math.floor(s%60):Math.floor(s%60)}`; }
+    function doSearch() { loadList(document.getElementById('kw').value); }
+    function showToast(m) { const t=document.getElementById('toast'); t.innerText=m; t.style.display='block'; setTimeout(()=>t.style.display='none',3000); }
+
+    // --- 手机 ---
+    function initPhone() { document.getElementById('car-ui').style.display='none'; document.getElementById('phone-ui').style.display='flex'; connectMqtt(new URL(window.location).searchParams.get('id'), false); }
+    function openCast() { document.getElementById('cast-layer').style.display='flex'; document.getElementById('qrcode').innerHTML=''; new QRCode(document.getElementById('qrcode'), {text:location.href.split('?')[0]+`?mode=remote&id=${ROOM}`, width:200, height:200}); }
+    function sendData() { const v=document.getElementById('p-text').value; if(v) client.publish(new URL(window.location).searchParams.get('id'), v); alert('已发送'); }
+    function connectMqtt(t, c) { client=mqtt.connect(MQTT); client.on('connect', ()=>{ if(c) client.subscribe(t); }); if(c) client.on('message', (t,m)=> { const v=m.toString(); document.getElementById('cast-layer').style.display='none'; if(v.startsWith('http')) play(v); else { document.getElementById('kw').value=v; loadList(v); } }); }
+</script>
+</body>
+</html>
