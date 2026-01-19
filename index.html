@@ -3,135 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Tesla Cinema Pro</title>
+    <title>Tesla Cinema Ultra</title>
     <style>
-        /* --- 1. 特斯拉暗黑风格 UI --- */
-        body { margin: 0; padding: 0; background-color: #121212; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
-        
-        /* 布局容器 */
+        /* --- UI 样式区 --- */
+        body { margin: 0; padding: 0; background-color: #121212; color: #fff; font-family: sans-serif; overflow: hidden; }
         #app { display: flex; flex-direction: column; height: 100vh; }
 
-        /* 顶部搜索栏 */
-        .header { padding: 15px; background: #1e1e1e; display: flex; gap: 10px; align-items: center; z-index: 10; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
-        input { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #2c2c2c; color: #fff; font-size: 16px; outline: none; }
-        button { padding: 10px 20px; border-radius: 8px; border: none; background: #E50914; color: #fff; font-weight: bold; cursor: pointer; }
-        button:active { opacity: 0.8; }
+        /* 搜索栏 */
+        .header { padding: 15px; background: #1e1e1e; display: flex; gap: 10px; z-index: 10; }
+        input { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #333; background: #2c2c2c; color: #fff; font-size: 16px; outline: none; }
+        button { padding: 0 20px; border-radius: 8px; border: none; background: #E50914; color: #fff; font-weight: bold; font-size: 15px; }
 
-        /* 内容区域 (滚动) */
-        .content { flex: 1; overflow-y: auto; padding: 15px; position: relative; }
+        /* 内容区 */
+        .content { flex: 1; overflow-y: auto; padding: 15px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 15px; }
         
-        /* 海报网格 */
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 15px; }
-        .card { background: #1e1e1e; border-radius: 8px; overflow: hidden; cursor: pointer; transition: transform 0.2s; }
-        .card:active { transform: scale(0.95); }
+        /* 卡片 */
+        .card { background: #1e1e1e; border-radius: 6px; overflow: hidden; cursor: pointer; }
         .poster { width: 100%; aspect-ratio: 2/3; object-fit: cover; background: #333; }
-        .title { padding: 8px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+        .title { padding: 8px; font-size: 13px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        /* 播放器层 (覆盖全屏) */
+        /* 播放器层 */
         #player-layer {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; z-index: 100; display: none; flex-direction: column;
         }
         
-        /* 播放器 Iframe */
         .iframe-box { flex: 1; width: 100%; position: relative; }
         iframe { width: 100%; height: 100%; border: none; display: block; }
+
+        /* 控制区 */
+        .controls { height: 35%; background: #121212; padding: 15px; overflow-y: auto; border-top: 1px solid #333; }
         
-        /* 选集控制栏 */
-        .controls { height: 30%; background: #121212; padding: 15px; overflow-y: auto; border-top: 1px solid #333; }
-        .episode-list { display: flex; flex-wrap: wrap; gap: 10px; }
-        .ep-btn { 
-            padding: 8px 15px; background: #2c2c2c; border-radius: 4px; font-size: 14px; 
-            cursor: pointer; border: 1px solid #333; min-width: 60px; text-align: center;
+        /* 线路切换按钮组 */
+        .lines-group { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .line-btn { 
+            padding: 6px 12px; background: #333; border-radius: 4px; font-size: 12px; 
+            color: #aaa; border: 1px solid #444; cursor: pointer;
         }
-        .ep-btn.active { background: #E50914; border-color: #E50914; }
-        
-        /* 关闭按钮 */
+        .line-btn.active { background: #E50914; color: #fff; border-color: #E50914; }
+
+        /* 选集按钮 */
+        .ep-list { display: flex; flex-wrap: wrap; gap: 10px; }
+        .ep-btn { 
+            padding: 10px 18px; background: #2c2c2c; border-radius: 4px; font-size: 14px; 
+            cursor: pointer; min-width: 50px; text-align: center; border: 1px solid #333;
+        }
+        .ep-btn.active { background: #fff; color: #000; border-color: #fff; }
+
         .close-btn { 
             position: absolute; top: 15px; left: 15px; z-index: 200; 
-            background: rgba(0,0,0,0.6); padding: 5px 15px; border-radius: 20px; 
-            border: 1px solid rgba(255,255,255,0.3); font-size: 12px;
+            background: rgba(0,0,0,0.6); padding: 6px 16px; border-radius: 20px; 
+            border: 1px solid rgba(255,255,255,0.3); font-size: 13px;
         }
-
-        /* 加载中提示 */
         .loading { text-align: center; padding: 20px; color: #666; display: none; }
-        .error-msg { text-align: center; padding: 20px; color: #E50914; }
+        .error-msg { text-align: center; padding: 30px; color: #E50914; font-size: 14px; }
     </style>
 </head>
 <body>
 
 <div id="app">
     <div class="header">
-        <input type="text" id="searchInput" placeholder="搜电影、电视剧..." value="庆余年">
+        <input type="text" id="searchInput" placeholder="搜片名..." value="庆余年">
         <button onclick="doSearch()">搜索</button>
     </div>
-
     <div class="content">
-        <div id="loading" class="loading">正在连接资源库...</div>
+        <div id="loading" class="loading">正在搜索全网资源...</div>
         <div id="videoGrid" class="grid"></div>
     </div>
 </div>
 
 <div id="player-layer">
-    <div class="close-btn" onclick="closePlayer()">← 返回搜索</div>
+    <div class="close-btn" onclick="closePlayer()">← 返回</div>
+    
     <div class="iframe-box">
         <iframe id="playFrame" src="" allow="autoplay; encrypted-media; fullscreen" scrolling="no"></iframe>
     </div>
+    
     <div class="controls">
-        <h3 id="playTitle" style="margin-top:0; font-size:16px;">选集</h3>
-        <div id="episodes" class="episode-list"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <h3 id="playTitle" style="margin:0; font-size:16px;">正在播放</h3>
+            <span style="font-size:12px; color:#666;">如果失败请切换线路 👇</span>
+        </div>
+
+        <div id="line-box" class="lines-group"></div>
+
+        <div id="episodes" class="ep-list"></div>
     </div>
 </div>
 
 <script>
-    // --- 配置区 ---
-    // 你的资源 API 
-    const API_TARGET = "https://hhzyapi.com/api.php/provide/vod/";
-    // 你的解析器地址
-    const PARSER_URL = "https://hhjiexi.com/play/?url=";
-    
-    // --- 核心逻辑 ---
+    // --- 1. 多个备用解析线路 (这是救命稻草) ---
+    const PARSERS = [
+        { name: "线路1 (推荐)", url: "https://hhjiexi.com/play/?url=" },
+        { name: "线路2 (备用)", url: "https://jx.xmflv.com/?url=" },
+        { name: "线路3 (通用)", url: "https://jx.aidouer.net/?url=" },
+        { name: "线路4 (纯净)", url: "https://im1907.top/?jx=" }
+    ];
 
+    const API_TARGET = "https://hhzyapi.com/api.php/provide/vod/";
+    let currentVideoUrl = ""; // 当前选中的那一集的链接
+
+    // --- 搜索逻辑 (保持不变，利用 AllOrigins) ---
     async function doSearch() {
         const wd = document.getElementById('searchInput').value;
-        if(!wd) return alert("请输入关键词");
+        if(!wd) return;
 
         const grid = document.getElementById('videoGrid');
         const loader = document.getElementById('loading');
         
         grid.innerHTML = '';
         loader.style.display = 'block';
-        loader.innerText = "正在通过公共线路搜索...";
 
         try {
-            // 构造目标 API 地址
+            // 使用公共代理请求 API
             const targetUrl = `${API_TARGET}?ac=detail&wd=${encodeURIComponent(wd)}`;
-            
-            // ✅ 【关键修改】使用 AllOrigins 公共中转服务
-            // 这样你就不需要自己写 api/search.js 了，直接通过它的服务器去拿数据
             const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-
-            // 发起请求
+            
             const res = await fetch(proxyUrl);
-            
-            if (!res.ok) throw new Error("网络请求失败");
-            
             const data = await res.json();
             
             loader.style.display = 'none';
 
             if (!data.list || data.list.length === 0) {
-                grid.innerHTML = '<div class="error-msg">未找到相关影片</div>';
+                grid.innerHTML = '<div class="error-msg">未找到相关资源，换个词试试</div>';
                 return;
             }
 
-            // 渲染海报墙
             data.list.forEach(item => {
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.onclick = () => openPlayer(item);
                 card.innerHTML = `
-                    <img class="poster" src="${item.vod_pic}" onerror="this.src='https://via.placeholder.com/150x200?text=No+Image'">
+                    <img class="poster" src="${item.vod_pic}" onerror="this.src='https://via.placeholder.com/150x200?text=Poster'">
                     <div class="title">${item.vod_name}</div>
                 `;
                 grid.appendChild(card);
@@ -139,32 +143,32 @@
 
         } catch (e) {
             loader.style.display = 'none';
-            grid.innerHTML = `<div class="error-msg">搜索出错了<br>${e.message}</div>`;
+            grid.innerHTML = `<div class="error-msg">网络错误，请重试</div>`;
         }
     }
 
-    // 打开播放器
+    // --- 打开播放器 ---
     function openPlayer(videoData) {
         document.getElementById('player-layer').style.display = 'flex';
-        document.getElementById('playTitle').innerText = videoData.vod_name + " - 正在播放";
+        document.getElementById('playTitle').innerText = videoData.vod_name;
         
-        const playUrlStr = videoData.vod_play_url; 
-        const episodesDiv = document.getElementById('episodes');
-        episodesDiv.innerHTML = '';
+        // 1. 初始化线路按钮
+        renderLines();
 
-        // 数据清洗：取 hhm3u8 或第一组资源
-        let listStr = playUrlStr;
-        if (playUrlStr.includes('$$$')) {
-            // 尝试找 hhm3u8 这一组
-            const parts = playUrlStr.split('$$$');
-            // 这里简单粗暴取第1组，通常质量最好
-            listStr = parts[0]; 
-        }
+        // 2. 解析选集列表
+        const epDiv = document.getElementById('episodes');
+        epDiv.innerHTML = '';
         
-        const epList = listStr.split('#').filter(s => s.includes('$'));
+        // 处理多组资源 ($$$)
+        let playUrlStr = videoData.vod_play_url;
+        if (playUrlStr.includes('$$$')) {
+            playUrlStr = playUrlStr.split('$$$')[0]; // 默认取第一组
+        }
+
+        const epList = playUrlStr.split('#').filter(s => s.includes('$'));
 
         if(epList.length === 0) {
-            episodesDiv.innerHTML = '<div style="color:#666">暂无播放线路</div>';
+            epDiv.innerHTML = '<div style="color:#666;padding:10px">无播放资源</div>';
             return;
         }
 
@@ -174,29 +178,62 @@
             btn.className = 'ep-btn';
             btn.innerText = name;
             btn.onclick = () => {
+                // 选中集数
                 document.querySelectorAll('.ep-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                playVideo(url);
+                
+                // 记录当前视频地址，并调用当前线路播放
+                currentVideoUrl = url;
+                playWithCurrentLine();
             };
-            episodesDiv.appendChild(btn);
+            epDiv.appendChild(btn);
         });
 
-        // 自动播放第一集
+        // 自动播放第1集
         if(epList.length > 0) {
-            episodesDiv.firstChild.click();
+            epDiv.firstChild.click();
         }
     }
 
-    function playVideo(m3u8Url) {
+    // --- 渲染线路按钮 ---
+    let currentLineIndex = 0; // 默认用第1条
+
+    function renderLines() {
+        const box = document.getElementById('line-box');
+        box.innerHTML = '';
+        
+        PARSERS.forEach((parser, index) => {
+            const btn = document.createElement('div');
+            btn.className = `line-btn ${index === currentLineIndex ? 'active' : ''}`;
+            btn.innerText = parser.name;
+            btn.onclick = () => {
+                currentLineIndex = index;
+                renderLines(); // 刷新按钮状态
+                playWithCurrentLine(); // 立即用新线路播放
+            };
+            box.appendChild(btn);
+        });
+    }
+
+    // --- 执行播放 ---
+    function playWithCurrentLine() {
+        if (!currentVideoUrl) return;
+        
         const frame = document.getElementById('playFrame');
-        frame.src = PARSER_URL + m3u8Url;
+        const parserPrefix = PARSERS[currentLineIndex].url;
+        
+        // 拼接：解析接口 + 视频地址
+        frame.src = parserPrefix + currentVideoUrl;
+        
+        console.log("正在使用线路:", PARSERS[currentLineIndex].name, "播放:", currentVideoUrl);
     }
 
     function closePlayer() {
         document.getElementById('player-layer').style.display = 'none';
-        document.getElementById('playFrame').src = ""; 
+        document.getElementById('playFrame').src = "";
     }
 
+    // 页面加载
     window.onload = () => {
         document.getElementById('searchInput').value = '热门';
         doSearch();
