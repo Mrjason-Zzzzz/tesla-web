@@ -3,95 +3,145 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tesla XG-Iframe</title>
+    <title>Tesla Blob Player</title>
     <style>
-        /* 主页面仅仅是一个黑色外壳，什么都没有 */
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
-        
-        /* 全屏 Iframe 容器 */
+        /* 全屏 Iframe，无边框 */
         #app-frame {
-            width: 100vw;
-            height: 100vh;
-            border: none;
-            display: block;
+            width: 100vw; height: 100vh; border: none; display: block; background: #000;
         }
     </style>
 </head>
 <body>
 
-    <iframe id="app-frame" allow="autoplay; encrypted-media; fullscreen" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+<iframe id="app-frame" allow="autoplay; encrypted-media; fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
 
 <script>
-    // --- 配置 ---
-    // 你的测试源
+    // --- 你的测试源 ---
     const VIDEO_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
 
-    // --- 虚拟页面的 HTML 代码 ---
-    // 这段代码实际上是运行在 Iframe 内部的
-    const innerHTML = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <style>
-            body { margin: 0; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: sans-serif; }
-            #player { width: 100%; height: 100%; }
-            
-            /* 简单的控制层，防止无法交互 */
-            .tips { position: absolute; top: 10px; left: 10px; z-index: 100; font-size: 12px; color: rgba(255,255,255,0.5); pointer-events: none; }
-        </style>
-        <script src="https://unpkg.com/xgplayer@2.31.2/browser/index.js"><\/script>
-        <script src="https://unpkg.com/xgplayer-hls@2.5.2/dist/index.min.js"><\/script>
-    </head>
-    <body>
-        <div class="tips">XGPlayer Core (Iframe Mode)</div>
-        <div id="player"></div>
+    // --- 1. 定义播放器页面的完整 HTML 代码 ---
+    // 这将被转换成一个 Blob 对象，模拟一个真实的 .html 文件
+    const playerPageHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; color: #fff; font-family: sans-serif; }
+        #player { width: 100% !important; height: 100% !important; background: #000; }
+        
+        /* 调试日志层 */
+        #debug { 
+            position: absolute; top: 10px; left: 10px; z-index: 999; 
+            font-size: 12px; color: lime; background: rgba(0,0,0,0.5); 
+            padding: 5px; pointer-events: none; max-width: 80%; word-break: break-all;
+        }
 
-        <script>
-            // 等待资源加载
-            window.onload = function() {
-                // 初始化 XGPlayer
-                let player = new window.HlsJsPlayer({
+        /* 启动遮罩：强制用户交互，防止自动播放失败 */
+        #start-mask {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 100;
+            display: flex; align-items: center; justify-content: center;
+            flex-direction: column; cursor: pointer;
+        }
+        .play-btn {
+            font-size: 60px; color: #E50914; margin-bottom: 20px;
+        }
+        .hint { font-size: 14px; color: #ccc; }
+    </style>
+    <script src="https://unpkg.com/xgplayer@2.31.6/browser/index.js"><\/script>
+    <script src="https://unpkg.com/xgplayer-hls@2.5.2/dist/index.min.js"><\/script>
+</head>
+<body>
+    <div id="debug">初始化中...</div>
+    
+    <div id="player"></div>
+
+    <div id="start-mask" onclick="startPlay()">
+        <div class="play-btn">▶</div>
+        <div class="hint">点击屏幕开始 (D档防黑屏模式)</div>
+    </div>
+
+    <script>
+        const logDiv = document.getElementById('debug');
+        function log(msg) {
+            console.log(msg);
+            logDiv.innerText = msg + '\\n' + logDiv.innerText.substring(0, 100);
+        }
+
+        let player = null;
+
+        function startPlay() {
+            document.getElementById('start-mask').style.display = 'none';
+            initPlayer();
+        }
+
+        function initPlayer() {
+            log('准备加载播放器...');
+            
+            try {
+                player = new window.HlsJsPlayer({
                     id: 'player',
                     url: '${VIDEO_URL}',
                     playsinline: true,
-                    whitelist: [''], // 允许在任何设备播放
-                    autoplay: true,
-                    fluid: true,     // 流式布局，填满容器
-                    fitVideoSize: 'auto',
+                    whitelist: [''],
+                    autoplay: true, // 用户点击后，这里可以自动播放
                     volume: 1.0,
-                    // 关键配置：开启 MSE 硬解，而不是原生 Video 标签播放
-                    useHls: true, 
+                    fitVideoSize: 'auto',
+                    fluid: true,
+                    // 关键：开启 MSE 硬解
+                    useHls: true,
                     hlsOpts: {
-                        enableWorker: true // 开启多线程解码
+                        enableWorker: true,
+                        xhrSetup: function(xhr, url) {
+                            xhr.withCredentials = false; // 允许跨域
+                        }
                     },
-                    ignores: ['fullscreen'] // 禁用自带全屏，防止触发车机拦截
+                    ignores: ['fullscreen', 'rotate'] // 禁用自带全屏
                 });
 
-                // 强制重试机制
-                player.on('error', function() {
-                    console.log('播放出错，尝试重载...');
-                    player.reload();
+                // 事件监听
+                player.on('ready', () => log('播放器就绪'));
+                player.on('playing', () => log('正在播放 (Video Active)'));
+                player.on('error', (e) => {
+                    log('错误: ' + JSON.stringify(e));
+                    // 自动重试
+                    setTimeout(() => {
+                        log('尝试重载...');
+                        player.reload();
+                    }, 2000);
                 });
-                
-                // 点击屏幕任意位置播放/暂停
-                document.body.addEventListener('click', function() {
-                    if(player.paused) player.play();
-                    else player.pause();
-                });
+
+            } catch(e) {
+                log('初始化崩溃: ' + e.message);
             }
-        <\/script>
-    </body>
-    </html>
+        }
+        
+        // 捕获全局错误
+        window.onerror = function(msg, url, line) {
+            log('Global Error: ' + msg);
+        };
+    <\/script>
+</body>
+</html>
     `;
 
-    // --- 注入逻辑 ---
-    window.onload = function() {
-        const frame = document.getElementById('app-frame');
-        // 使用 srcdoc 将上面的代码注入到 iframe 中
-        // 这相当于你的网页里“套”了另一个独立的微型网页
-        frame.srcdoc = innerHTML;
+    // --- 2. 核心黑科技：Blob URL ---
+    // 将上面的 HTML 字符串转换成一个二进制 Blob 对象
+    const blob = new Blob([playerPageHTML], { type: 'text/html' });
+    // 生成一个类似 "blob:https://vercel.com/xxxx-xxxx" 的独立 URL
+    const blobUrl = URL.createObjectURL(blob);
+
+    // --- 3. 导航 Iframe ---
+    const frame = document.getElementById('app-frame');
+    frame.src = blobUrl;
+
+    // 清理内存
+    frame.onload = () => {
+        // URL.revokeObjectURL(blobUrl); // 暂时不清理，防止刷新丢失
+        console.log("Iframe loaded with Blob URL");
     };
 </script>
 </body>
