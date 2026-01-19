@@ -2,146 +2,131 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tesla Blob Player</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tesla Base64 Player</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"></script>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
-        /* 全屏 Iframe，无边框 */
-        #app-frame {
-            width: 100vw; height: 100vh; border: none; display: block; background: #000;
+        #app-frame { width: 100vw; height: 100vh; border: none; display: block; background: #000; }
+        /* 全局调试层 */
+        #global-log {
+            position: fixed; top: 0; left: 0; width: 100%; z-index: 9999;
+            background: rgba(0,0,0,0.8); color: lime; font-family: monospace;
+            padding: 10px; pointer-events: none; font-size: 12px;
         }
     </style>
 </head>
 <body>
 
-<iframe id="app-frame" allow="autoplay; encrypted-media; fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+<div id="global-log">主程序启动...</div>
+<iframe id="app-frame" allow="autoplay; encrypted-media; fullscreen" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
 
 <script>
-    // --- 你的测试源 ---
-    const VIDEO_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
+    const logDiv = document.getElementById('global-log');
+    function log(msg) { logDiv.innerText = msg; console.log(msg); }
 
-    // --- 1. 定义播放器页面的完整 HTML 代码 ---
-    // 这将被转换成一个 Blob 对象，模拟一个真实的 .html 文件
-    const playerPageHTML = `
+    // 你的资源
+    const V_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
+
+    // 备用资源 (如果你的那个坏了，用这个测)
+    const TEST_URL = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
+
+    window.onload = function() {
+        log("正在构建 Base64 播放器...");
+
+        // 这是一个极其精简的 HTML 结构，没有任何多余的库
+        const innerHTML = `
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; color: #fff; font-family: sans-serif; }
-        #player { width: 100% !important; height: 100% !important; background: #000; }
-        
-        /* 调试日志层 */
-        #debug { 
-            position: absolute; top: 10px; left: 10px; z-index: 999; 
-            font-size: 12px; color: lime; background: rgba(0,0,0,0.5); 
-            padding: 5px; pointer-events: none; max-width: 80%; word-break: break-all;
-        }
-
-        /* 启动遮罩：强制用户交互，防止自动播放失败 */
-        #start-mask {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); z-index: 100;
-            display: flex; align-items: center; justify-content: center;
-            flex-direction: column; cursor: pointer;
-        }
-        .play-btn {
-            font-size: 60px; color: #E50914; margin-bottom: 20px;
-        }
-        .hint { font-size: 14px; color: #ccc; }
-    </style>
-    <script src="https://unpkg.com/xgplayer@2.31.6/browser/index.js"><\/script>
-    <script src="https://unpkg.com/xgplayer-hls@2.5.2/dist/index.min.js"><\/script>
+<meta charset="UTF-8">
+<style>
+    body{margin:0;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh}
+    video{width:100%;height:100%;object-fit:contain}
+    #info{position:absolute;top:50px;left:10px;color:yellow;z-index:100;background:rgba(0,0,0,0.5)}
+    button{position:absolute;z-index:200;padding:20px 40px;font-size:20px;background:red;color:white;border:none;border-radius:10px;cursor:pointer}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"><\/script>
 </head>
 <body>
-    <div id="debug">初始化中...</div>
-    
-    <div id="player"></div>
-
-    <div id="start-mask" onclick="startPlay()">
-        <div class="play-btn">▶</div>
-        <div class="hint">点击屏幕开始 (D档防黑屏模式)</div>
-    </div>
+    <div id="info">等待指令...</div>
+    <video id="v" playsinline webkit-playsinline controls></video>
+    <button id="btn" onclick="start()">点击播放 (D档)</button>
 
     <script>
-        const logDiv = document.getElementById('debug');
-        function log(msg) {
-            console.log(msg);
-            logDiv.innerText = msg + '\\n' + logDiv.innerText.substring(0, 100);
-        }
+        const v = document.getElementById('v');
+        const info = document.getElementById('info');
+        const btn = document.getElementById('btn');
+        const url = "${V_URL}"; // 使用你的链接
 
-        let player = null;
+        function msg(t) { info.innerText = t; }
 
-        function startPlay() {
-            document.getElementById('start-mask').style.display = 'none';
-            initPlayer();
-        }
-
-        function initPlayer() {
-            log('准备加载播放器...');
+        window.start = function() {
+            btn.style.display = 'none';
+            msg("正在解析 HLS流...");
             
-            try {
-                player = new window.HlsJsPlayer({
-                    id: 'player',
-                    url: '${VIDEO_URL}',
-                    playsinline: true,
-                    whitelist: [''],
-                    autoplay: true, // 用户点击后，这里可以自动播放
-                    volume: 1.0,
-                    fitVideoSize: 'auto',
-                    fluid: true,
-                    // 关键：开启 MSE 硬解
-                    useHls: true,
-                    hlsOpts: {
-                        enableWorker: true,
-                        xhrSetup: function(xhr, url) {
-                            xhr.withCredentials = false; // 允许跨域
+            if (Hls.isSupported()) {
+                const hls = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    // 核心：强制允许跨域
+                    xhrSetup: function(xhr) { xhr.withCredentials = false; }
+                });
+                
+                hls.loadSource(url);
+                hls.attachMedia(v);
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    msg("解析成功，尝试播放...");
+                    v.play().catch(e => {
+                        msg("自动播放失败: " + e.message);
+                        btn.style.display = 'block';
+                        btn.innerText = "重试播放";
+                    });
+                });
+                
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    msg("HLS错误: " + data.type + " - " + data.details);
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                msg("致命错误: 网络连接失败 (可能源挂了)");
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                msg("致命错误: 媒体解码失败");
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                hls.destroy();
+                                break;
                         }
-                    },
-                    ignores: ['fullscreen', 'rotate'] // 禁用自带全屏
+                    }
                 });
-
-                // 事件监听
-                player.on('ready', () => log('播放器就绪'));
-                player.on('playing', () => log('正在播放 (Video Active)'));
-                player.on('error', (e) => {
-                    log('错误: ' + JSON.stringify(e));
-                    // 自动重试
-                    setTimeout(() => {
-                        log('尝试重载...');
-                        player.reload();
-                    }, 2000);
-                });
-
-            } catch(e) {
-                log('初始化崩溃: ' + e.message);
+                
+                // 监听状态
+                v.addEventListener('playing', () => msg("状态: 播放中 (D档请观察是否黑屏)"));
+                v.addEventListener('waiting', () => msg("状态: 缓冲中..."));
+                
+            } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+                // 针对 Safari / 原生支持的环境
+                v.src = url;
+                v.play();
+            } else {
+                msg("错误: 你的浏览器完全不支持 HLS");
             }
         }
-        
-        // 捕获全局错误
-        window.onerror = function(msg, url, line) {
-            log('Global Error: ' + msg);
-        };
     <\/script>
 </body>
 </html>
-    `;
+        `;
 
-    // --- 2. 核心黑科技：Blob URL ---
-    // 将上面的 HTML 字符串转换成一个二进制 Blob 对象
-    const blob = new Blob([playerPageHTML], { type: 'text/html' });
-    // 生成一个类似 "blob:https://vercel.com/xxxx-xxxx" 的独立 URL
-    const blobUrl = URL.createObjectURL(blob);
-
-    // --- 3. 导航 Iframe ---
-    const frame = document.getElementById('app-frame');
-    frame.src = blobUrl;
-
-    // 清理内存
-    frame.onload = () => {
-        // URL.revokeObjectURL(blobUrl); // 暂时不清理，防止刷新丢失
-        console.log("Iframe loaded with Blob URL");
+        const frame = document.getElementById('app-frame');
+        
+        // 使用 srcdoc (特斯拉浏览器 Chrome 109+ 支持这个，比 Blob 更稳)
+        frame.srcdoc = innerHTML;
+        
+        log("播放器注入完成，请点击屏幕中央红按钮");
     };
 </script>
 </body>
