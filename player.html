@@ -3,32 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Player Core Watchdog</title>
+    <title>Player Core Vercel API</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
         #mse { width: 100%; height: 100%; }
-        
         #start-mask {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.9); z-index: 999;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer;
         }
         .play-btn {
-            width: 100px; height: 100px; background: #E50914; border-radius: 50%;
+            font-size: 60px; color: #E50914; border: 4px solid #E50914;
+            border-radius: 50%; width: 100px; height: 100px;
             display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 40px; box-shadow: 0 0 30px rgba(229,9,20,0.6);
-            margin-bottom: 20px;
         }
-        .status { color: #aaa; font-family: monospace; font-size: 12px; text-align: center; padding: 0 20px;}
-        /* 倒计时条 */
-        .loader-bar {
-            width: 200px; height: 4px; background: #333; margin-top: 10px; border-radius: 2px; overflow: hidden;
-            display: none;
-        }
-        .loader-fill {
-            height: 100%; background: #E50914; width: 0%; transition: width 0.2s linear;
-        }
+        .log-box { color: #0f0; margin-top: 20px; font-family: monospace; font-size: 12px; }
     </style>
     <script src="//unpkg.com/xgplayer@2.31.6/browser/index.js"></script>
     <script src="//unpkg.com/xgplayer-hls@2.5.2/dist/index.min.js"></script>
@@ -37,129 +26,49 @@
 
     <div id="start-mask" onclick="init()">
         <div class="play-btn">▶</div>
-        <div class="status" id="log">点击启动 (智能切线版)</div>
-        <div class="loader-bar" id="bar-box"><div class="loader-fill" id="bar"></div></div>
+        <div class="log-box" id="log">点击启动 (Vercel API 独享模式)</div>
     </div>
-    
     <div id="mse"></div>
 
     <script>
         const logDiv = document.getElementById('log');
-        const bar = document.getElementById('bar');
-        const barBox = document.getElementById('bar-box');
-        
-        function log(msg) { logDiv.innerText = msg; console.log(msg); }
+        function log(msg) { logDiv.innerText = msg; }
 
-        // --- 视频源 ---
+        // 目标视频
         const RAW_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
-        
-        // --- 线路池 ---
-        const PROXIES = [
-            "",                        // 线路1: 直连 (速度最快，但易卡住)
-            "https://corsproxy.io/?",  // 线路2: 专用代理 (最稳)
-            "https://api.codetabs.com/v1/proxy?quest=" // 线路3: 备用代理
-        ];
-        
-        let player = null;
-        let watchdogTimer = null; // 看门狗计时器
-        let progressInterval = null;
 
         function init() {
-            tryPlay(0);
-        }
+            document.getElementById('start-mask').style.display = 'none';
+            log("正在连接 Vercel 云端代理...");
 
-        function tryPlay(index) {
-            // 1. 如果所有线路都试完了
-            if (index >= PROXIES.length) {
-                log("❌ 全军覆没：所有线路均无法播放。\n请检查源链接是否失效。");
-                barBox.style.display = 'none';
-                return;
-            }
+            // 【核心】使用你自己的 API
+            // /api/proxy 是 Vercel 自动识别的路径
+            const proxyUrl = `/api/proxy?url=${encodeURIComponent(RAW_URL)}`;
 
-            // 2. 准备当前线路
-            const prefix = PROXIES[index];
-            const finalUrl = prefix ? (prefix + encodeURIComponent(RAW_URL)) : RAW_URL;
-            const modeName = prefix ? "代理模式" : "直连模式";
+            let player = new window.HlsJsPlayer({
+                id: 'mse',
+                url: proxyUrl, // 走你自己的后端
+                playsinline: true,
+                autoplay: true,
+                fluid: true,
+                fitVideoSize: 'contain',
+                volume: 1.0,
+                useHls: true,
+                hlsOpts: {
+                    enableWorker: true,
+                    // 因为是同源请求（都属于 vercel.app），这里不需要复杂的跨域配置
+                },
+                ignores: ['fullscreen', 'rotate']
+            });
+
+            player.on('error', (e) => {
+                console.log(e);
+                log("播放失败，请检查 api/proxy.js 是否部署成功");
+            });
             
-            log(`正在尝试线路 ${index+1}/${PROXIES.length}: ${modeName}...\n(5秒无反应将强制切换)`);
-            barBox.style.display = 'block';
-            bar.style.width = '0%';
-
-            // 3. 销毁旧实例
-            if (player) {
-                try { player.destroy(); } catch(e){}
-            }
-
-            // 4. 【核心】启动看门狗 (5秒倒计时)
-            clearTimers(); // 清理旧定时器
-            let progress = 0;
-            // 进度条动画
-            progressInterval = setInterval(() => {
-                progress += 2; // 50ms * 100 = 5000ms
-                if(progress > 100) progress = 100;
-                bar.style.width = progress + '%';
-            }, 50); // 每50ms更新一次
-            
-            // 5秒后强制判死刑
-            watchdogTimer = setTimeout(() => {
-                console.warn(`线路 ${index+1} 超时，强制切换`);
-                switchNext(index, "连接超时");
-            }, 5000);
-
-            // 5. 初始化播放器
-            try {
-                player = new window.HlsJsPlayer({
-                    id: 'mse',
-                    url: finalUrl,
-                    playsinline: true,
-                    whitelist: [''],
-                    autoplay: true,
-                    fluid: true,
-                    fitVideoSize: 'contain',
-                    volume: 1.0,
-                    useHls: true,
-                    hlsOpts: {
-                        enableWorker: true,
-                        // 代理模式下禁用凭证，防止跨域报错
-                        xhrSetup: function(xhr) { if(prefix) xhr.withCredentials = false; }
-                    },
-                    ignores: ['fullscreen', 'rotate']
-                });
-
-                // 6. 监听成功信号
-                player.once('playing', () => {
-                    clearTimers(); // 解除警报
-                    document.getElementById('start-mask').style.display = 'none';
-                    console.log('播放成功');
-                });
-                
-                // 监听加载事件(辅助判断)
-                player.once('complete', () => { clearTimers(); }); 
-
-                // 7. 监听错误信号 (如果报错比超时快)
-                player.once('error', (e) => {
-                    console.log('捕获错误', e);
-                    switchNext(index, "加载错误");
-                });
-
-            } catch(e) {
-                switchNext(index, "初始化异常");
-            }
-        }
-
-        function switchNext(currentIndex, reason) {
-            clearTimers(); // 停掉当前的计时器
-            log(`线路 ${currentIndex+1} 失败 (${reason})，正在切换...`);
-            
-            // 延迟1秒后试下一条，给用户看一眼提示
-            setTimeout(() => {
-                tryPlay(currentIndex + 1);
-            }, 1000);
-        }
-
-        function clearTimers() {
-            if(watchdogTimer) clearTimeout(watchdogTimer);
-            if(progressInterval) clearInterval(progressInterval);
+            player.on('playing', () => {
+                log("播放成功！");
+            });
         }
     </script>
 </body>
