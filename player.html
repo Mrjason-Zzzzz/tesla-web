@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Player Core</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+        #mse { width: 100%; height: 100%; background: #000; }
+        /* 巨大的启动按钮，防止自动播放策略拦截 */
+        #start-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 999;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+        }
+        .play-icon {
+            font-size: 80px; color: #E50914; border: 4px solid #E50914;
+            border-radius: 50%; width: 120px; height: 120px;
+            display: flex; align-items: center; justify-content: center;
+        }
+    </style>
+    <script src="//unpkg.com/xgplayer@2.31.6/browser/index.js" charset="utf-8"></script>
+    <script src="//unpkg.com/xgplayer-hls@2.5.2/dist/index.min.js" charset="utf-8"></script>
+</head>
+<body>
+
+    <div id="start-layer" onclick="start()">
+        <div class="play-icon">▶</div>
+    </div>
+    
+    <div id="mse"></div>
+
+    <script>
+        // 获取 URL 中的 m3u8 地址
+        const params = new URLSearchParams(window.location.search);
+        // 默认测试源
+        const DEFAULT_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
+        const url = params.get('url') || DEFAULT_URL;
+
+        let player = null;
+
+        function start() {
+            document.getElementById('start-layer').style.display = 'none';
+            
+            // 初始化西瓜播放器
+            player = new window.HlsJsPlayer({
+                id: 'mse',
+                url: url,
+                playsinline: true,
+                whitelist: [''],
+                autoplay: true,
+                fitVideoSize: 'auto',
+                fluid: true,
+                volume: 1.0,
+                // 核心：开启 MSE，绕过原生 Video 检测
+                useHls: true,
+                hlsOpts: {
+                    enableWorker: true
+                },
+                // 移除所有可能触发全屏的控件
+                ignores: ['fullscreen', 'cssFullscreen', 'rotate']
+            });
+
+            player.on('error', (e) => {
+                console.log('Error', e);
+                // 错误自动恢复
+                player.reload();
+            });
+        }
+    </script>
+</body>
+</html>
