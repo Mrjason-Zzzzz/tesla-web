@@ -1,72 +1,79 @@
 // 文件路径：api/proxy.js
-// v43.0 流式传输版：彻底解决视频切片加载失败/黑屏问题
-import { Readable } from 'stream';
+// v44.0 Edge Runtime 极速版
+// 开启 Vercel 边缘计算模式，专门解决视频流传输卡顿/黑屏问题
 
-export default async function handler(req, res) {
-  const { url } = req.query;
+export const config = {
+  runtime: 'edge', // ⬅️ 核心：切换到 Edge 模式
+};
 
-  if (!url) {
-    return res.status(400).send("Error: 请提供 ?url= 参数");
+export default async function handler(request) {
+  const urlObj = new URL(request.url);
+  const targetUrl = urlObj.searchParams.get('url');
+
+  if (!targetUrl) {
+    return new Response("Error: 请提供 ?url= 参数", { status: 400 });
   }
 
-  // 获取当前域名的前缀，用于拼接
-  const host = req.headers.host;
-  const protocol = req.headers['x-forwarded-proto'] || 'http';
-  const proxyBaseUrl = `${protocol}://${host}/api/proxy?url=`;
+  // 1. 定义请求头 (模拟特斯拉车机)
+  const headers = {
+    "User-Agent": "Mozilla/5.0 (Linux; Android 12; Tesla Model Y) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Mobile Safari/537.36",
+    "Referer": "https://www.google.com/",
+  };
 
   try {
-    const headers = {
-      "User-Agent": "Mozilla/5.0 (Linux; Android 12; Tesla Model Y) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Mobile Safari/537.36",
-      "Referer": "https://www.google.com/",
-    };
+    // 2. 请求源站
+    const response = await fetch(targetUrl, { headers });
 
-    // 发起请求
-    const response = await fetch(url, { headers });
+    // 3. 准备响应头 (允许跨域)
+    const newHeaders = new Headers(response.headers);
+    newHeaders.set('Access-Control-Allow-Origin', '*');
+    newHeaders.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
 
+    // 如果源站返回错误
     if (!response.ok) {
-      return res.status(response.status).send(`源站错误: ${response.statusText}`);
+      return new Response(`源站错误: ${response.status} ${response.statusText}`, { status: response.status });
     }
 
-    const contentType = response.headers.get("content-type");
+    const contentType = newHeaders.get('content-type');
 
-    // === 情况 1：如果是 m3u8 索引文件 (需要修改内容) ===
-    if (url.includes(".m3u8") || (contentType && contentType.includes("mpegurl"))) {
-      let m3u8Text = await response.text();
-      const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+    // === 情况 A：如果是 m3u8 索引文件 (需要修改内容) ===
+    if (targetUrl.includes('.m3u8') || (contentType && contentType.includes('mpegurl'))) {
+      const text = await response.text();
+      const baseUrl = targetUrl.substring(0, targetUrl.lastIndexOf('/') + 1);
+      const proxyBaseUrl = `${urlObj.origin}${urlObj.pathname}?url=`;
 
-      // 正则替换：给所有视频链接穿上“代理马甲”
-      // 解决“链接没变”的疑虑：实际上内容里的链接变了，只是地址栏看不到
-      m3u8Text = m3u8Text.replace(/^(?!#)(.+)$/gm, (match) => {
+      // 正则替换：给视频链接穿上代理马甲
+      const modifiedText = text.replace(/^(?!#)(.+)$/gm, (match) => {
         let line = match.trim();
+        // 补全相对路径
         if (!line.startsWith('http')) {
-           line = baseUrl + line; // 补全相对路径
+          line = baseUrl + line;
         }
+        // 再次包裹进我们的代理
         return `${proxyBaseUrl}${encodeURIComponent(line)}`;
       });
 
-      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.status(200).send(m3u8Text);
-    } 
-    // === 情况 2：如果是视频切片 .ts (需要流式转发) ===
-    else {
-      // 设置响应头，透传 Content-Type
-      res.setHeader("Content-Type", contentType || "video/mp2t");
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      
-      // 【核心修复】使用 Node.js 原生流对接
-      // 这能极大降低内存占用，防止 Vercel 报错
-      if (response.body) {
-        // 将 Web Stream 转换为 Node Stream 并通过管道(pipe)直接发给客户端
-        // 这是最快、最稳的传输方式
-        Readable.fromWeb(response.body).pipe(res);
-      } else {
-        res.end();
-      }
+      newHeaders.set('Content-Type', 'application/vnd.apple.mpegurl');
+      return new Response(modifiedText, {
+        headers: newHeaders,
+        status: 200
+      });
     }
 
-  } catch (error) {
-    console.error("Proxy Error:", error);
-    res.status(500).send("代理异常: " + error.message);
+    // === 情况 B：如果是视频切片 .ts (直接透传流) ===
+    // Edge 模式下，直接返回 response.body 就是最高效的流式传输
+    // 不需要任何 pipe 或 buffer 操作，原生支持
+    else {
+      // 确保 Content-Type 正确
+      if (!contentType) newHeaders.set('Content-Type', 'video/mp2t');
+      
+      return new Response(response.body, {
+        headers: newHeaders,
+        status: 200
+      });
+    }
+
+  } catch (e) {
+    return new Response("代理异常: " + e.message, { status: 500 });
   }
 }
