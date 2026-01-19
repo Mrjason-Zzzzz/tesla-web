@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Tesla Cinema</title>
+    <title>Tesla Cinema Pro</title>
     <style>
         /* --- 1. 特斯拉暗黑风格 UI --- */
         body { margin: 0; padding: 0; background-color: #121212; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
@@ -55,6 +55,7 @@
 
         /* 加载中提示 */
         .loading { text-align: center; padding: 20px; color: #666; display: none; }
+        .error-msg { text-align: center; padding: 20px; color: #E50914; }
     </style>
 </head>
 <body>
@@ -84,12 +85,13 @@
 
 <script>
     // --- 配置区 ---
-    // 你的解析器地址 (支持 iframe 的那个)
+    // 你的资源 API 
+    const API_TARGET = "https://hhzyapi.com/api.php/provide/vod/";
+    // 你的解析器地址
     const PARSER_URL = "https://hhjiexi.com/play/?url=";
-
+    
     // --- 核心逻辑 ---
 
-    // 1. 搜索功能
     async function doSearch() {
         const wd = document.getElementById('searchInput').value;
         if(!wd) return alert("请输入关键词");
@@ -99,20 +101,27 @@
         
         grid.innerHTML = '';
         loader.style.display = 'block';
+        loader.innerText = "正在通过公共线路搜索...";
 
         try {
-            // ✅ 【关键修改】调用我们自己的 Vercel 中转 API，解决跨域问题
-            // 确保你已经创建了 api/search.js 文件
-            const res = await fetch(`/api/search?wd=${encodeURIComponent(wd)}`);
+            // 构造目标 API 地址
+            const targetUrl = `${API_TARGET}?ac=detail&wd=${encodeURIComponent(wd)}`;
             
-            if (!res.ok) throw new Error("搜索请求失败");
+            // ✅ 【关键修改】使用 AllOrigins 公共中转服务
+            // 这样你就不需要自己写 api/search.js 了，直接通过它的服务器去拿数据
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+
+            // 发起请求
+            const res = await fetch(proxyUrl);
+            
+            if (!res.ok) throw new Error("网络请求失败");
             
             const data = await res.json();
             
             loader.style.display = 'none';
 
             if (!data.list || data.list.length === 0) {
-                grid.innerHTML = '<div style="width:100%;text-align:center;color:#666">未找到相关影片</div>';
+                grid.innerHTML = '<div class="error-msg">未找到相关影片</div>';
                 return;
             }
 
@@ -130,25 +139,34 @@
 
         } catch (e) {
             loader.style.display = 'none';
-            alert("搜索出错了：" + e.message);
+            grid.innerHTML = `<div class="error-msg">搜索出错了<br>${e.message}</div>`;
         }
     }
 
-    // 2. 打开播放器
+    // 打开播放器
     function openPlayer(videoData) {
         document.getElementById('player-layer').style.display = 'flex';
         document.getElementById('playTitle').innerText = videoData.vod_name + " - 正在播放";
         
-        // 解析播放列表字符串
         const playUrlStr = videoData.vod_play_url; 
         const episodesDiv = document.getElementById('episodes');
         episodesDiv.innerHTML = '';
 
-        // 如果有多个分隔符 $$$，取第一条线路
-        let listStr = playUrlStr.split('$$$')[0]; 
+        // 数据清洗：取 hhm3u8 或第一组资源
+        let listStr = playUrlStr;
+        if (playUrlStr.includes('$$$')) {
+            // 尝试找 hhm3u8 这一组
+            const parts = playUrlStr.split('$$$');
+            // 这里简单粗暴取第1组，通常质量最好
+            listStr = parts[0]; 
+        }
         
-        // 分割集数 (格式: 第01集$http...)
         const epList = listStr.split('#').filter(s => s.includes('$'));
+
+        if(epList.length === 0) {
+            episodesDiv.innerHTML = '<div style="color:#666">暂无播放线路</div>';
+            return;
+        }
 
         epList.forEach(ep => {
             const [name, url] = ep.split('$');
@@ -156,7 +174,6 @@
             btn.className = 'ep-btn';
             btn.innerText = name;
             btn.onclick = () => {
-                // 移除其他高亮
                 document.querySelectorAll('.ep-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 playVideo(url);
@@ -170,20 +187,16 @@
         }
     }
 
-    // 3. 执行播放
     function playVideo(m3u8Url) {
         const frame = document.getElementById('playFrame');
-        // 拼接解析地址
         frame.src = PARSER_URL + m3u8Url;
     }
 
-    // 4. 关闭播放器
     function closePlayer() {
         document.getElementById('player-layer').style.display = 'none';
-        document.getElementById('playFrame').src = ""; // 停止播放
+        document.getElementById('playFrame').src = ""; 
     }
 
-    // 页面加载自动搜一下热门
     window.onload = () => {
         document.getElementById('searchInput').value = '热门';
         doSearch();
