@@ -3,29 +3,154 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tesla Cinema</title>
+    <title>Tesla Speed Player</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
-        /* 全屏无边框 Iframe */
-        #app-frame {
-            width: 100vw; height: 100vh; border: none; display: block;
-        }
+        /* 全屏 Iframe，模拟 xxiptv 架构 */
+        #app-frame { width: 100vw; height: 100vh; border: none; display: block; }
     </style>
 </head>
 <body>
 
-    <iframe id="app-frame" allow="autoplay; encrypted-media"></iframe>
+<iframe id="app-frame" allow="autoplay; encrypted-media; fullscreen"></iframe>
+
+<script>
+    // 你的测试源
+    const VIDEO_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
+
+    // --- 1. 定义播放器内核 (纯净版 HTML) ---
+    const playerHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+    body { margin: 0; background: #000; color: #fff; font-family: monospace; overflow: hidden; }
+    video { width: 100%; height: 100%; object-fit: contain; }
+    
+    /* 启动按钮层 */
+    #start-layer {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.9); z-index: 100;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        cursor: pointer;
+    }
+    .btn-icon {
+        font-size: 60px; color: #E50914; border: 3px solid #E50914;
+        border-radius: 50%; width: 100px; height: 100px;
+        display: flex; align-items: center; justify-content: center; margin-bottom: 20px;
+    }
+    
+    /* 实时日志面板 */
+    #logs {
+        position: absolute; top: 10px; left: 10px; z-index: 200;
+        background: rgba(0, 50, 0, 0.8); padding: 10px; border: 1px solid lime;
+        color: lime; font-size: 12px; pointer-events: none;
+        width: 80%; max-height: 200px; overflow: hidden; white-space: pre-wrap;
+    }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"><\/script>
+</head>
+<body>
+
+    <div id="logs">系统初始化...</div>
+
+    <div id="start-layer" onclick="initVideo()">
+        <div class="btn-icon">▶</div>
+        <div style="color:#aaa">点击屏幕启动 (D档模式)</div>
+    </div>
+    
+    <video id="v" playsinline webkit-playsinline></video>
 
     <script>
-        // 你的测试源
-        const MY_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
-        
-        const frame = document.getElementById('app-frame');
-        
-        // 加载播放器核心，并传入视频地址
-        // 加个随机数 t=... 防止车机缓存旧代码
-        frame.src = `player.html?t=${Date.now()}&url=${encodeURIComponent(MY_URL)}`;
-    </script>
+        const logBox = document.getElementById('logs');
+        function log(msg) {
+            const t = new Date().toLocaleTimeString();
+            logBox.innerText = "[" + t + "] " + msg + "\\n" + logBox.innerText;
+        }
 
+        const url = "${VIDEO_URL}";
+        const video = document.getElementById('v');
+        let hls = null;
+
+        // 检查 Hls 是否加载成功
+        window.onload = function() {
+            if (typeof Hls === 'undefined') {
+                log("❌ 致命错误: HLS库加载失败！");
+                log("可能原因: 车机网络屏蔽了 CDN，请检查网络。");
+                document.querySelector('.btn-icon').innerText = "!";
+            } else {
+                log("✅ HLS库加载成功，等待用户点击...");
+            }
+        };
+
+        function initVideo() {
+            document.getElementById('start-layer').style.display = 'none';
+            log("正在尝试加载视频...");
+
+            if (Hls.isSupported()) {
+                log("内核: Hls.js (MSE模式)");
+                hls = new Hls({
+                    debug: false,
+                    enableWorker: true, // 多线程解码
+                    xhrSetup: function (xhr) { xhr.withCredentials = false; } // 跨域设置
+                });
+
+                hls.loadSource(url);
+                hls.attachMedia(video);
+
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    log("✅ 索引解析成功，开始播放");
+                    video.play().catch(e => {
+                        log("⚠️ 自动播放被拦截，请再次点击画面");
+                    });
+                });
+
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                log("❌ 网络错误: 无法连接资源站");
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                log("❌ 解码错误: 尝试恢复...");
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                log("❌ 无法恢复的错误: " + data.type);
+                                hls.destroy();
+                                break;
+                        }
+                    } else {
+                        // log("非致命错误: " + data.type);
+                    }
+                });
+                
+                // 状态监控
+                video.addEventListener('playing', () => log("▶️ 状态: 播放中 (D档请观察)"));
+                video.addEventListener('waiting', () => log("⏳ 状态: 缓冲中..."));
+                video.addEventListener('error', (e) => log("❌ 视频标签错误: " + e.message));
+
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                log("内核: 原生 Safari 模式");
+                video.src = url;
+                video.play();
+            } else {
+                log("❌ 你的浏览器不支持 HLS");
+            }
+        }
+    <\/script>
+</body>
+</html>
+    `;
+
+    // --- 2. 生成 Blob URL (模拟独立文件) ---
+    const blob = new Blob([playerHtml], { type: 'text/html' });
+    const blobUrl = URL.createObjectURL(blob);
+    
+    // --- 3. 注入 Iframe ---
+    document.getElementById('app-frame').src = blobUrl;
+</script>
 </body>
 </html>
