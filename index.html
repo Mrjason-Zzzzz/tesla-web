@@ -2,278 +2,97 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="referrer" content="no-referrer">
-    <title>Tesla WebGL Core</title>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tesla XG-Iframe</title>
     <style>
-        :root { --bg: #000; --accent: #E50914; }
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: var(--bg); overflow: hidden; font-family: sans-serif; }
-
-        /* 布局容器 */
-        .app { display: flex; width: 100vw; height: 100vh; }
+        /* 主页面仅仅是一个黑色外壳，什么都没有 */
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
         
-        /* 侧边栏 */
-        .sidebar { width: 80px; background: #111; border-right: 1px solid #333; display: flex; flex-direction: column; align-items: center; padding-top: 30px; z-index: 20; }
-        .btn { width: 50px; height: 50px; border-radius: 12px; margin-bottom: 20px; display: flex; justify-content: center; align-items: center; color: #666; font-size: 12px; cursor: pointer; background: #1a1a1a; }
-        .btn.active { background: #333; color: var(--accent); border: 1px solid var(--accent); }
-        .btn i { font-size: 20px; }
-
-        /* 主区域 */
-        .main { flex: 1; position: relative; background: #000; display: flex; flex-direction: column; }
-
-        /* --- 核心播放区 --- */
-        #player-stage { 
-            flex: 1; position: relative; overflow: hidden; background: #000;
-            display: flex; align-items: center; justify-content: center;
-        }
-
-        /* 1. 幽灵视频源 (不隐藏，但置于底层) */
-        #source-video { 
-            position: absolute; top: 0; left: 0; width: 10px; height: 10px; 
-            opacity: 0.01; z-index: 0; pointer-events: none;
-        }
-
-        /* 2. WebGL 画布 (GPU 渲染) */
-        #gl-canvas { 
-            width: 100%; height: 100%; object-fit: contain; z-index: 10;
-        }
-
-        /* 3. D档全屏样式 */
-        .app.drive-mode .sidebar { display: none; }
-        .app.drive-mode .main { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; }
-        .app.drive-mode #gl-canvas { width: 100vw; height: 100vh; }
-
-        /* 顶部栏 */
-        .top-bar { height: 60px; background: rgba(20,20,20,0.9); display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid #333; gap: 15px; }
-        .url-box { flex: 1; background: #222; border: 1px solid #444; color: #fff; height: 40px; border-radius: 20px; padding: 0 20px; font-family: monospace; }
-        
-        /* 控制按钮 */
-        .float-ctrl {
-            position: absolute; bottom: 30px; right: 30px; z-index: 100;
-            display: flex; gap: 10px;
-        }
-        .action-btn {
-            background: rgba(229, 9, 20, 0.9); color: white; border: none;
-            padding: 12px 24px; border-radius: 30px; font-weight: bold; cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5); backdrop-filter: blur(5px);
-            display: flex; align-items: center; gap: 8px;
-        }
-        
-        /* 调试日志 */
-        #debug-log {
-            position: absolute; top: 10px; left: 10px; color: lime; 
-            font-family: monospace; font-size: 10px; z-index: 50; 
-            pointer-events: none; background: rgba(0,0,0,0.5); padding: 5px;
+        /* 全屏 Iframe 容器 */
+        #app-frame {
+            width: 100vw;
+            height: 100vh;
+            border: none;
+            display: block;
         }
     </style>
 </head>
 <body>
 
-<div class="app" id="app">
-    <div class="sidebar">
-        <div class="btn active"><i class="fas fa-play"></i></div>
-        <div class="btn" onclick="location.reload()"><i class="fas fa-sync"></i></div>
-    </div>
-
-    <div class="main">
-        <div class="top-bar">
-            <input type="text" class="url-box" value="https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8" disabled>
-            <div style="color:#666; font-size:12px;">WebGL 引擎已就绪</div>
-        </div>
-
-        <div id="player-stage">
-            <div id="debug-log">Log: Ready</div>
-            
-            <video id="source-video" playsinline webkit-playsinline crossorigin="anonymous" muted></video>
-            
-            <canvas id="gl-canvas"></canvas>
-        </div>
-
-        <div class="float-ctrl">
-            <button class="action-btn" id="play-btn" onclick="startPlay()">
-                <i class="fas fa-play"></i> 播放
-            </button>
-            <button class="action-btn" id="drive-btn" onclick="toggleDrive()" style="display:none; background:#E50914;">
-                <i class="fas fa-car"></i> D档模式
-            </button>
-        </div>
-    </div>
-</div>
-
-<script id="vs" type="x-shader/x-vertex">
-    attribute vec2 position;
-    attribute vec2 texCoord;
-    varying vec2 vTexCoord;
-    void main() {
-        gl_Position = vec4(position, 0.0, 1.0);
-        vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);
-    }
-</script>
-<script id="fs" type="x-shader/x-fragment">
-    precision mediump float;
-    uniform sampler2D u_image;
-    varying vec2 vTexCoord;
-    void main() {
-        gl_FragColor = texture2D(u_image, vTexCoord);
-    }
-</script>
+    <iframe id="app-frame" allow="autoplay; encrypted-media; fullscreen" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
 
 <script>
-    // --- 核心变量 ---
-    const video = document.getElementById('source-video');
-    const canvas = document.getElementById('gl-canvas');
-    const logDiv = document.getElementById('debug-log');
-    const driveBtn = document.getElementById('drive-btn');
-    let gl, program, texture;
-    let isDrive = false;
-    let wakeLockId; // 唤醒定时器
+    // --- 配置 ---
+    // 你的测试源
+    const VIDEO_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
 
-    // --- 日志 ---
-    function log(msg) {
-        console.log(msg);
-        logDiv.innerText = msg + '\n' + logDiv.innerText.substring(0, 100);
-    }
-
-    // --- 1. WebGL 初始化 (GPU 渲染管道) ---
-    function initWebGL() {
-        gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-        if (!gl) return log("错误: 浏览器不支持 WebGL");
-
-        // 编译着色器
-        const vs = createShader(gl, gl.VERTEX_SHADER, document.getElementById('vs').text);
-        const fs = createShader(gl, gl.FRAGMENT_SHADER, document.getElementById('fs').text);
-        program = createProgram(gl, vs, fs);
-        gl.useProgram(program);
-
-        // 设置矩形顶点 (全屏铺满)
-        const positionLocation = gl.getAttribLocation(program, "position");
-        const texCoordLocation = gl.getAttribLocation(program, "texCoord");
-        
-        const buffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-            -1, -1,  0, 0,
-             1, -1,  1, 0,
-            -1,  1,  0, 1,
-            -1,  1,  0, 1,
-             1, -1,  1, 0,
-             1,  1,  1, 1,
-        ]), gl.STATIC_DRAW);
-
-        gl.enableVertexAttribArray(positionLocation);
-        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 16, 0);
-        gl.enableVertexAttribArray(texCoordLocation);
-        gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 16, 8);
-
-        // 创建纹理
-        texture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        
-        log("WebGL 渲染引擎初始化完成");
-    }
-
-    // --- 2. 渲染循环 ---
-    function renderLoop() {
-        if (!video.paused && !video.ended) {
-            // 将视频帧作为纹理上传到 GPU
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
-            gl.drawArrays(gl.TRIANGLES, 0, 6);
-        }
-        requestAnimationFrame(renderLoop);
-    }
-
-    // --- 3. 播放逻辑 & 唤醒机制 ---
-    function startPlay() {
-        initWebGL();
-        
-        const url = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
-        
-        if (Hls.isSupported()) {
-            const hls = new Hls({
-                enableWorker: true,
-                xhrSetup: xhr => { xhr.withCredentials = false; } // 跨域关键
-            });
-            hls.loadSource(url);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                video.muted = false; // 尝试取消静音
-                video.play().then(() => {
-                    log("开始播放");
-                    driveBtn.style.display = 'flex';
-                    document.getElementById('play-btn').style.display = 'none';
-                    renderLoop();
-                    startWakeLock(); // 启动防冻结
-                }).catch(e => log("自动播放被拦截，请再点一次"));
-            });
-        }
-    }
-
-    // --- 4. 防冻结电击器 (Decoder Shocker) ---
-    // 这是一个肮脏但有效的 Hack：每隔一段时间微调时间轴，强迫浏览器解码
-    function startWakeLock() {
-        if(wakeLockId) clearInterval(wakeLockId);
-        wakeLockId = setInterval(() => {
-            if (!video.paused) {
-                // 极微小的快进，人耳听不出，但能激活解码器
-                // 注意：如果这导致卡顿，可以把时间间隔调大
-                // video.currentTime += 0.0001; 
-                
-                // 另一种唤醒方式：读取一下 video 的属性，触发浏览器重绘
-                const t = video.currentTime;
-                log("Wake: " + t.toFixed(1));
-            }
-        }, 1000);
-    }
-
-    // --- 5. D档模式 ---
-    function toggleDrive() {
-        isDrive = !isDrive;
-        const app = document.getElementById('app');
-        const btn = document.getElementById('drive-btn');
-        
-        if (isDrive) {
-            app.classList.add('drive-mode');
-            btn.innerHTML = '<i class="fas fa-compress"></i> 退出 D档';
-            log("已进入 D档模式 (WebGL GPU渲染)");
+    // --- 虚拟页面的 HTML 代码 ---
+    // 这段代码实际上是运行在 Iframe 内部的
+    const innerHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <style>
+            body { margin: 0; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: sans-serif; }
+            #player { width: 100%; height: 100%; }
             
-            // 调整 Canvas 分辨率以匹配屏幕
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            gl.viewport(0, 0, canvas.width, canvas.height);
-        } else {
-            app.classList.remove('drive-mode');
-            btn.innerHTML = '<i class="fas fa-car"></i> 开启 D档模式';
-        }
-    }
+            /* 简单的控制层，防止无法交互 */
+            .tips { position: absolute; top: 10px; left: 10px; z-index: 100; font-size: 12px; color: rgba(255,255,255,0.5); pointer-events: none; }
+        </style>
+        <script src="https://unpkg.com/xgplayer@2.31.2/browser/index.js"><\/script>
+        <script src="https://unpkg.com/xgplayer-hls@2.5.2/dist/index.min.js"><\/script>
+    </head>
+    <body>
+        <div class="tips">XGPlayer Core (Iframe Mode)</div>
+        <div id="player"></div>
 
-    // --- WebGL 辅助函数 ---
-    function createShader(gl, type, source) {
-        const shader = gl.createShader(type);
-        gl.shaderSource(shader, source);
-        gl.compileShader(shader);
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            console.error(gl.getShaderInfoLog(shader));
-            gl.deleteShader(shader);
-            return null;
-        }
-        return shader;
-    }
-    function createProgram(gl, vs, fs) {
-        const program = gl.createProgram();
-        gl.attachShader(program, vs);
-        gl.attachShader(program, fs);
-        gl.linkProgram(program);
-        return program;
-    }
+        <script>
+            // 等待资源加载
+            window.onload = function() {
+                // 初始化 XGPlayer
+                let player = new window.HlsJsPlayer({
+                    id: 'player',
+                    url: '${VIDEO_URL}',
+                    playsinline: true,
+                    whitelist: [''], // 允许在任何设备播放
+                    autoplay: true,
+                    fluid: true,     // 流式布局，填满容器
+                    fitVideoSize: 'auto',
+                    volume: 1.0,
+                    // 关键配置：开启 MSE 硬解，而不是原生 Video 标签播放
+                    useHls: true, 
+                    hlsOpts: {
+                        enableWorker: true // 开启多线程解码
+                    },
+                    ignores: ['fullscreen'] // 禁用自带全屏，防止触发车机拦截
+                });
+
+                // 强制重试机制
+                player.on('error', function() {
+                    console.log('播放出错，尝试重载...');
+                    player.reload();
+                });
+                
+                // 点击屏幕任意位置播放/暂停
+                document.body.addEventListener('click', function() {
+                    if(player.paused) player.play();
+                    else player.pause();
+                });
+            }
+        <\/script>
+    </body>
+    </html>
+    `;
+
+    // --- 注入逻辑 ---
+    window.onload = function() {
+        const frame = document.getElementById('app-frame');
+        // 使用 srcdoc 将上面的代码注入到 iframe 中
+        // 这相当于你的网页里“套”了另一个独立的微型网页
+        frame.srcdoc = innerHTML;
+    };
 </script>
 </body>
 </html>
