@@ -84,8 +84,6 @@
 
 <script>
     // --- 配置区 ---
-    // 你的资源 API (JSON 接口)
-    const API_BASE = "https://hhzyapi.com/api.php/provide/vod/";
     // 你的解析器地址 (支持 iframe 的那个)
     const PARSER_URL = "https://hhjiexi.com/play/?url=";
 
@@ -103,8 +101,12 @@
         loader.style.display = 'block';
 
         try {
-            // 直接调用 API 搜索 (ac=detail 才能直接拿到播放链接)
-            const res = await fetch(`${API_BASE}?ac=detail&wd=${encodeURIComponent(wd)}`);
+            // ✅ 【关键修改】调用我们自己的 Vercel 中转 API，解决跨域问题
+            // 确保你已经创建了 api/search.js 文件
+            const res = await fetch(`/api/search?wd=${encodeURIComponent(wd)}`);
+            
+            if (!res.ok) throw new Error("搜索请求失败");
+            
             const data = await res.json();
             
             loader.style.display = 'none';
@@ -128,7 +130,7 @@
 
         } catch (e) {
             loader.style.display = 'none';
-            alert("搜索失败：API 可能有跨域限制，请查看下方说明。\n" + e.message);
+            alert("搜索出错了：" + e.message);
         }
     }
 
@@ -138,16 +140,14 @@
         document.getElementById('playTitle').innerText = videoData.vod_name + " - 正在播放";
         
         // 解析播放列表字符串
-        // 格式通常是: "第01集$http://...#第02集$http://..."
-        // 有些资源站有多个线路，我们取 "hhm3u8" 或第一个
         const playUrlStr = videoData.vod_play_url; 
         const episodesDiv = document.getElementById('episodes');
         episodesDiv.innerHTML = '';
 
-        // 简单处理：假设只有一个播放组，或者都混合在一起
-        // 如果有多个分隔符 $$$，通常代表多条线路，这里简化处理取第一条
+        // 如果有多个分隔符 $$$，取第一条线路
         let listStr = playUrlStr.split('$$$')[0]; 
         
+        // 分割集数 (格式: 第01集$http...)
         const epList = listStr.split('#').filter(s => s.includes('$'));
 
         epList.forEach(ep => {
