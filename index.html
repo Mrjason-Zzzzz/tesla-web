@@ -2,112 +2,23 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <!-- 特斯拉车机核心适配：禁用缩放、强制全屏、触屏优化 -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>特斯拉可运行视频播放器</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Tesla Cinema Static</title>
     <style>
-        /* 特斯拉车机全屏适配，极简样式确保无兼容问题 */
-        * { margin: 0; padding: 0; touch-action: manipulation; }
-        body { background: #000; }
-        #player {
-            width: 100vw;
-            height: 100vh;
-            background: #000;
-        }
-        /* 特斯拉风格控制栏，放大按钮适配触屏 */
-        .xgplayer-controls {
-            height: 80px !important;
-        }
-        .xgplayer-button {
-            font-size: 24px !important;
-            width: 60px !important;
-            height: 60px !important;
-        }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+        /* 全屏无边框 Iframe */
+        iframe { width: 100vw; height: 100vh; border: none; display: block; }
     </style>
-    <!-- 引入xgplayer核心库（CDN直连，确保能加载） -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xgplayer@2.31.4/dist/index.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/xgplayer@2.31.4/dist/index.min.js"></script>
-    <!-- 引入xgplayer的HLS插件（播放m3u8必选） -->
-    <script src="https://cdn.jsdelivr.net/npm/xgplayer-hls@2.31.4/dist/index.min.js"></script>
 </head>
 <body>
-    <!-- 播放器容器 -->
-    <div id="player"></div>
+
+    <iframe id="app-frame" allow="autoplay; encrypted-media; fullscreen"></iframe>
 
     <script>
-        // ========== 核心：初始化xgplayer，确保特斯拉车机可运行 ==========
-        window.onload = function() {
-            // 1. 配置特斯拉车机专属参数
-            const playerConfig = {
-                id: 'player',
-                url: '', // 先空，后续通过代理加载
-                autoplay: true, // 自动播放（特斯拉车机需手动触发，后续处理）
-                muted: false, // 不静音
-                loop: false,
-                // 核心：适配特斯拉D档播放（禁用系统检测）
-                playsinline: true,
-                webkitPlaysInline: true,
-                x5VideoPlayerType: 'h5',
-                x5VideoPlayerFullscreen: false,
-                x5VideoOrientation: 'landscape',
-                // 性能优化（特斯拉车机低配也能跑）
-                performanceMode: true,
-                // 音画同步配置（xgplayer内置成熟算法）
-                audioSync: true,
-                syncThreshold: 0.1, // 同步阈值0.1秒，确保无延迟
-                // 触屏优化
-                touch: true,
-                progressTouch: true,
-                // 调试模式（方便你排查问题）
-                debug: true,
-                // 加载超时配置
-                timeout: 30000,
-                retryCount: 3
-            };
-
-            // 2. 加载HLS插件（播放m3u8必选）
-            const player = new XGPlayer(playerConfig);
-            player.usePlugin(window.XgplayerHls);
-
-            // 3. 关键：加载你的测试m3u8（通过代理，确保可访问）
-            const testM3u8 = 'https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8';
-            // 拼接代理地址（替换成你的服务器域名！！！）
-            const proxyUrl = 'https://lgcxs.com/video_proxy.php?url=' + encodeURIComponent(testM3u8);
-            
-            // 4. 解决特斯拉车机自动播放限制（手动触发）
-            player.on('ready', function() {
-                console.log('播放器初始化完成，准备加载视频');
-                // 设置播放地址
-                player.src = proxyUrl;
-                // 特斯拉车机需要手动触发播放（解决自动播放限制）
-                player.play().catch(err => {
-                    console.log('自动播放失败，点击屏幕播放:', err);
-                    // 点击屏幕任意位置触发播放
-                    document.body.addEventListener('click', function() {
-                        player.play();
-                    }, { once: true });
-                });
-            });
-
-            // 5. 错误处理（确保你能定位问题）
-            player.on('error', function(err) {
-                console.error('播放器错误:', err);
-                alert('播放错误：' + err.message + '，请检查代理地址是否正确');
-            });
-
-            // 6. 播放成功回调（确认D档可播放）
-            player.on('play', function() {
-                console.log('视频开始播放（特斯拉D档可用）');
-                alert('播放成功！特斯拉D档可正常显示');
-            });
-
-            // 7. 解决音画不同步（xgplayer内置修复）
-            player.on('timeupdate', function() {
-                if (player.audioSyncError > 0.2) {
-                    player.resetSync(); // 重置音画同步
-                }
-            });
-        };
+        // 防止缓存，每次加个时间戳
+        const t = Date.now();
+        document.getElementById('app-frame').src = `player.html?t=${t}`;
     </script>
+
 </body>
 </html>
