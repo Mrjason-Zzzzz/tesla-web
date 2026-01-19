@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Player Core</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+        #mse { width: 100%; height: 100%; }
+        
+        /* 启动遮罩 */
+        #start-mask {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); z-index: 999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer;
+        }
+        .play-btn {
+            width: 100px; height: 100px; background: #E50914; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 40px; box-shadow: 0 0 30px rgba(229,9,20,0.6);
+            margin-bottom: 20px;
+        }
+        .status { color: #aaa; font-family: monospace; font-size: 12px; }
+    </style>
+    <script src="//unpkg.com/xgplayer@2.31.6/browser/index.js"></script>
+    <script src="//unpkg.com/xgplayer-hls@2.5.2/dist/index.min.js"></script>
+</head>
+<body>
+
+    <div id="start-mask" onclick="init()">
+        <div class="play-btn">▶</div>
+        <div class="status" id="log">点击启动 (Vercel纯静态版)</div>
+    </div>
+    
+    <div id="mse"></div>
+
+    <script>
+        const logDiv = document.getElementById('log');
+        function log(msg) { logDiv.innerText = msg; console.log(msg); }
+
+        // --- 配置 ---
+        const RAW_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
+        
+        // 公共代理池 (代替 PHP 服务器)
+        // 这些服务免费帮我们转发请求，解决跨域问题
+        const PROXIES = [
+            "", // 1. 先尝试直连 (有些资源站支持跨域)
+            "https://corsproxy.io/?", // 2. 备用线路 A
+            "https://api.allorigins.win/raw?url=" // 3. 备用线路 B
+        ];
+        
+        let currentProxyIdx = 0;
+        let player = null;
+
+        function init() {
+            tryPlay(0);
+        }
+
+        function tryPlay(index) {
+            if (index >= PROXIES.length) {
+                log("❌ 所有线路均失败，请检查源是否失效");
+                return;
+            }
+
+            const prefix = PROXIES[index];
+            // 如果是代理模式，需要把原链接编码
+            const finalUrl = prefix ? (prefix + encodeURIComponent(RAW_URL)) : RAW_URL;
+            
+            const modeName = prefix ? "代理模式" : "直连模式";
+            log(`尝试线路 ${index+1}: ${modeName}...`);
+
+            if (player) player.destroy(); // 销毁旧实例
+
+            player = new window.HlsJsPlayer({
+                id: 'mse',
+                url: finalUrl,
+                playsinline: true,
+                whitelist: [''],
+                autoplay: true,
+                fluid: true,
+                fitVideoSize: 'contain',
+                volume: 1.0,
+                
+                // 核心：开启 MSE 硬解
+                useHls: true,
+                hlsOpts: {
+                    enableWorker: true,
+                    // 关键：如果走代理，不需要 withCredentials，否则会报错
+                    xhrSetup: function(xhr, url) {
+                        xhr.withCredentials = false;
+                    }
+                },
+                ignores: ['fullscreen', 'cssFullscreen', 'rotate']
+            });
+
+            // 监听成功
+            player.once('playing', () => {
+                document.getElementById('start-mask').style.display = 'none';
+                console.log('播放成功，当前线路有效');
+            });
+
+            // 监听错误，自动切换下一条线路
+            player.once('error', (e) => {
+                console.log('线路失败', e);
+                log(`线路 ${index+1} 失败，切换中...`);
+                setTimeout(() => {
+                    tryPlay(index + 1); // 递归尝试下一条
+                }, 1000);
+            });
+        }
+    </script>
+</body>
+</html>
