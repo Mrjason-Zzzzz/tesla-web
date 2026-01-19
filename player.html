@@ -39,24 +39,24 @@
         const logDiv = document.getElementById('log');
         function log(msg) { logDiv.innerText = msg; console.log(msg); }
 
-        // --- 配置 ---
+        // --- 视频源 ---
         const RAW_URL = "https://vod.360zyx.vip/20251018/eT501sKw/index.m3u8";
         
-        // 公共代理池 (代替 PHP 服务器)
-        // 这些服务免费帮我们转发请求，解决跨域问题
+        // --- 免费公共代理池 ---
+        // 代替 PHP 服务器的功能，解决跨域
         const PROXIES = [
-            "", // 1. 先尝试直连 (有些资源站支持跨域)
-            "https://corsproxy.io/?", // 2. 备用线路 A
-            "https://api.allorigins.win/raw?url=" // 3. 备用线路 B
+            "", // 1. 第0路：尝试直连 (有些资源站支持跨域，速度最快)
+            "https://corsproxy.io/?", // 2. 第1路：CorsProxy (稳定)
+            "https://api.allorigins.win/raw?url=" // 3. 第2路：AllOrigins (备用)
         ];
         
-        let currentProxyIdx = 0;
         let player = null;
 
         function init() {
             tryPlay(0);
         }
 
+        // 递归尝试线路
         function tryPlay(index) {
             if (index >= PROXIES.length) {
                 log("❌ 所有线路均失败，请检查源是否失效");
@@ -94,19 +94,19 @@
                 ignores: ['fullscreen', 'cssFullscreen', 'rotate']
             });
 
-            // 监听成功
+            // 监听成功：一旦播放，就隐藏遮罩
             player.once('playing', () => {
                 document.getElementById('start-mask').style.display = 'none';
                 console.log('播放成功，当前线路有效');
             });
 
-            // 监听错误，自动切换下一条线路
+            // 监听错误：如果当前线路不行，自动切下一条
             player.once('error', (e) => {
                 console.log('线路失败', e);
-                log(`线路 ${index+1} 失败，切换中...`);
+                log(`线路 ${index+1} 失败，自动切换...`);
                 setTimeout(() => {
                     tryPlay(index + 1); // 递归尝试下一条
-                }, 1000);
+                }, 1500);
             });
         }
     </script>
