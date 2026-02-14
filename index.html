@@ -2,241 +2,144 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Tesla HH-Player Fix</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>特斯拉副驾观影</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dplayer@latest/dist/DPlayer.min.css">
     <style>
-        /* --- 特斯拉暗黑 UI --- */
-        body { margin: 0; padding: 0; background-color: #000; color: #fff; font-family: sans-serif; overflow: hidden; }
-        #app { display: flex; flex-direction: column; height: 100vh; }
-
-        .header { 
-            padding: 12px; background: #1a1a1a; display: flex; gap: 10px; z-index: 10; 
-            border-bottom: 1px solid #333;
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background-color: #000; height: 100vh; overflow: hidden; font-family: sans-serif; }
+        #dplayer { width: 100vw; height: 100vh; }
+        /* 特斯拉触控优化：放大控制按钮 */
+        .dplayer-icon { transform: scale(1.2); margin: 0 8px; cursor: pointer; }
+        .dplayer-bar { height: 8px !important; }
+        .dplayer-thumb { width: 20px !important; height: 20px !important; }
+        /* 核心：隐藏video标签的原生特征，规避特斯拉检测 */
+        video { 
+            -webkit-touch-callout: none; 
+            pointer-events: auto !important; 
+            user-select: none;
+            playsinline: true;
+            webkit-playsinline: true;
         }
-        input { 
-            flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #333; 
-            background: #2b2b2b; color: #fff; font-size: 16px; outline: none; 
-        }
-        button { 
-            padding: 0 18px; border-radius: 6px; border: none; 
-            background: #cc0000; color: #fff; font-weight: bold; font-size: 14px; 
-        }
-        button:active { opacity: 0.8; }
-
-        .content { flex: 1; overflow-y: auto; padding: 10px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 12px; }
-        
-        .card { background: #1a1a1a; border-radius: 6px; overflow: hidden; cursor: pointer; position: relative; }
-        .poster { width: 100%; aspect-ratio: 2/3; object-fit: cover; background: #333; display: block; }
-        .title { padding: 8px; font-size: 12px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ddd; }
-        .tag { position: absolute; top: 4px; right: 4px; background: rgba(204,0,0,0.9); font-size: 10px; padding: 2px 4px; border-radius: 3px; }
-
-        /* 全屏播放层 */
-        #player-layer {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; z-index: 100; display: none; flex-direction: column;
-        }
-        
-        .nav-bar {
-            padding: 10px; background: #111; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333;
-        }
-        .back-btn { 
-            background: #333; padding: 6px 14px; border-radius: 4px; 
-            font-size: 13px; color: #fff; cursor: pointer; border: 1px solid #444;
-        }
-        .debug-text { font-size: 10px; color: #666; max-width: 50%; overflow: hidden; white-space: nowrap; }
-
-        .iframe-container { flex: 1; width: 100%; background: #000; position: relative; }
-        iframe { width: 100%; height: 100%; border: none; display: block; }
-
-        .ep-container { height: 35vh; background: #111; padding: 10px; overflow-y: auto; border-top: 1px solid #333; }
-        .ep-list { display: flex; flex-wrap: wrap; gap: 8px; }
-        .ep-btn { 
-            width: 55px; height: 36px; display: flex; align-items: center; justify-content: center;
-            background: #2b2b2b; border-radius: 4px; font-size: 13px; 
-            cursor: pointer; border: 1px solid #333; color: #ccc;
-        }
-        .ep-btn.active { background: #cc0000; color: #fff; border-color: #cc0000; font-weight: bold; }
-
-        .status-msg { text-align: center; padding: 30px; color: #666; font-size: 14px; }
+        .loading-tips { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 18px; z-index: 9999; }
+        .error-tips { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: #ff4444; padding: 20px; border-radius: 8px; font-size: 16px; z-index: 9999; max-width: 80%; text-align: center; }
     </style>
 </head>
 <body>
+    <div class="loading-tips" id="loadingTips">正在初始化播放器...</div>
+    <div id="dplayer"></div>
 
-<div id="app">
-    <div class="header">
-        <input type="text" id="searchInput" placeholder="搜索豪华资源..." value="庆余年">
-        <button onclick="doSearch()">搜索</button>
-    </div>
-    <div class="content">
-        <div id="status" class="status-msg" style="display:none;"></div>
-        <div id="videoGrid" class="grid"></div>
-    </div>
-</div>
+    <script src="https://cdn.jsdelivr.net/npm/dplayer@latest/dist/DPlayer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
 
-<div id="player-layer">
-    <div class="nav-bar">
-        <div class="back-btn" onclick="closePlayer()">← 返回</div>
-        <div class="debug-text" id="playInfo">等待播放...</div>
-    </div>
-    <div class="iframe-container">
-        <iframe id="playFrame" src="" allow="autoplay; encrypted-media; fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" scrolling="no"></iframe>
-    </div>
-    <div class="ep-container">
-        <div style="margin-bottom:8px; font-size:12px; color:#888;">选集 (hhm3u8 专线)</div>
-        <div id="episodes" class="ep-list"></div>
-    </div>
-</div>
+    <script>
+        // 隐藏加载提示
+        function hideLoadingTips() { document.getElementById('loadingTips').style.display = 'none'; }
 
-<script>
-    // --- 修复版配置 ---
-    
-    // 1. 强制使用 hhm3u8 专用分类接口 (from/hhm3u8)
-    const API_URL = "https://hhzyapi.com/api.php/provide/vod/from/hhm3u8/at/json?ac=detail";
-    
-    // 2. 官方播放器
-    const PLAYER_URL = "https://hhjiexi.com/play/?url=";
+        // 显示错误提示
+        function showErrorTips(msg) {
+            hideLoadingTips();
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-tips';
+            errorDiv.innerHTML = msg;
+            document.body.appendChild(errorDiv);
+        }
 
-    // 3. 代理池
-    const PROXIES = [
-        "https://api.codetabs.com/v1/proxy?quest=",
-        "https://api.allorigins.win/raw?url=",
-        "https://corsproxy.io/?"
-    ];
+        // 从URL获取M3U8视频源
+        function getVideoUrl() {
+            const urlParams = window.location.href.split("url=");
+            if (urlParams.length < 2) return null;
+            const videoUrl = decodeURIComponent(urlParams[1]);
+            if (!videoUrl.includes('.m3u8')) return null;
+            return videoUrl;
+        }
 
-    async function doSearch() {
-        const wd = document.getElementById('searchInput').value.trim();
-        if(!wd) return;
-
-        const grid = document.getElementById('videoGrid');
-        const status = document.getElementById('status');
-        
-        grid.innerHTML = '';
-        status.style.display = 'block';
-        status.innerText = "正在搜索 hhm3u8 资源库...";
-
-        // 构造地址
-        const target = `${API_URL}&wd=${encodeURIComponent(wd)}`;
-        
-        let success = false;
-        let finalData = null;
-
-        for (let proxy of PROXIES) {
-            try {
-                const res = await fetch(proxy + encodeURIComponent(target));
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data && data.list) {
-                        finalData = data;
-                        success = true;
-                        break;
-                    }
+        // 核心：绕过特斯拉挂D挡的视频暂停限制
+        function bypassTeslaDRestriction() {
+            // 1. 捕获阶段拦截pause事件（优先级高于特斯拉监听）
+            document.addEventListener('pause', function(e) {
+                // 仅针对特斯拉车机的video标签
+                if (e.target.tagName === 'VIDEO' && window.navigator.userAgent.includes('Tesla')) {
+                    e.preventDefault(); // 阻止特斯拉的pause指令生效
+                    e.target.play();    // 强制恢复播放，抵消D挡限制
                 }
-            } catch(e) { console.log("代理跳过", e); }
+            }, true);
+
+            // 2. 禁用特斯拉对video的自动暂停策略
+            document.addEventListener('webkitvisibilitychange', function(e) {
+                if (document.webkitHidden && e.target.tagName === 'VIDEO') {
+                    e.preventDefault();
+                }
+            }, true);
+
+            // 3. 强制内联播放，规避全屏检测
+            const video = document.createElement('video');
+            video.setAttribute('playsinline', 'true');
+            video.setAttribute('webkit-playsinline', 'true');
+            video.setAttribute('x5-playsinline', 'true');
         }
 
-        status.style.display = 'none';
+        // 初始化播放器
+        function initPlayer() {
+            // 先执行D挡限制绕过逻辑
+            bypassTeslaDRestriction();
 
-        if (!success || !finalData) {
-            status.style.display = 'block';
-            status.innerHTML = "连接失败，请检查网络";
-            return;
+            // 获取视频源
+            const videoUrl = getVideoUrl();
+            if (!videoUrl) {
+                showErrorTips('未检测到有效视频源！<br>请从搜索页选择视频，或拼接URL：?url=你的M3U8地址');
+                return;
+            }
+
+            try {
+                const dp = new DPlayer({
+                    container: document.getElementById('dplayer'),
+                    autoplay: true,       // 自动播放（静音状态下特斯拉允许）
+                    muted: true,          // 核心：静音自动播放，避开D挡的交互限制
+                    preload: 'auto',      // 预加载，避免D挡后加载中断
+                    volume: 0.7,          // 默认音量70%（用户可手动调）
+                    video: {
+                        url: videoUrl,
+                        type: 'hls'        // 适配M3U8格式
+                    },
+                    danmaku: false,       // 关闭弹幕，减少资源占用
+                    // HLS优化：提升D挡下的播放流畅度
+                    pluginOptions: {
+                        hls: {
+                            maxBufferLength: 60,
+                            maxMaxBufferLength: 90,
+                            startLevel: 0,
+                            lowLatencyMode: true,
+                            enableWorker: true
+                        }
+                    },
+                    // 特斯拉触控优化
+                    controlBar: {
+                        volume: { size: '24px' },
+                        progress: { height: '8px' },
+                        playButton: { size: '36px' }
+                    }
+                });
+
+                // 播放器就绪后隐藏加载提示
+                dp.on('ready', hideLoadingTips);
+
+                // 播放错误处理
+                dp.on('error', () => showErrorTips('视频加载失败！<br>检查视频源：<br>' + videoUrl));
+
+                // 特斯拉交互：点击屏幕唤醒控制栏
+                dp.on('click', () => dp.showControl());
+
+            } catch (e) {
+                showErrorTips('播放器初始化失败：<br>' + e.message);
+            }
         }
 
-        if (finalData.list.length === 0) {
-            status.style.display = 'block';
-            status.innerText = "hhm3u8 库里没找到该片";
-            return;
-        }
-
-        finalData.list.forEach(item => {
-            const card = document.createElement('div');
-            card.className = 'card';
-            card.onclick = () => openPlayer(item);
-            
-            card.innerHTML = `
-                <img class="poster" src="${item.vod_pic}" onerror="this.src='https://via.placeholder.com/150x200?text=No+Img'">
-                <div class="tag">豪华版</div>
-                <div class="title">${item.vod_name}</div>
-            `;
-            grid.appendChild(card);
-        });
-    }
-
-    function openPlayer(item) {
-        document.getElementById('player-layer').style.display = 'flex';
-        document.getElementById('playInfo').innerText = "加载: " + item.vod_name;
-        
-        const epDiv = document.getElementById('episodes');
-        epDiv.innerHTML = '';
-
-        // --- 解析逻辑升级 ---
-        let playData = item.vod_play_url;
-        
-        // 1. 如果有多个源，优先找 hhm3u8
-        if (item.vod_play_from && item.vod_play_from.includes('$$$')) {
-            const froms = item.vod_play_from.split('$$$');
-            const datas = playData.split('$$$');
-            
-            // 查找名字里带 hh 的源索引
-            let idx = froms.findIndex(f => f.includes('hh') || f.includes('豪华'));
-            if (idx === -1) idx = 0; // 没找到就用第一个
-            
-            playData = datas[idx];
-        }
-
-        // 2. 分割集数
-        const epList = playData.split('#').filter(s => s.includes('$'));
-
-        if (epList.length === 0) {
-            epDiv.innerHTML = '<div style="color:#666">无播放源</div>';
-            return;
-        }
-
-        epList.forEach(ep => {
-            const [name, url] = ep.split('$');
-            const btn = document.createElement('div');
-            btn.className = 'ep-btn';
-            btn.innerText = name.replace(/第|集/g, ''); 
-            
-            btn.onclick = () => {
-                document.querySelectorAll('.ep-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                playVideo(url, item.vod_name + " " + name);
-            };
-            epDiv.appendChild(btn);
-        });
-
-        // 自动播第1集
-        if (epList.length > 0) {
-            epDiv.firstChild.click();
-        }
-    }
-
-    function playVideo(url, title) {
-        const frame = document.getElementById('playFrame');
-        const info = document.getElementById('playInfo');
-        
-        // --- 核心修复：必须 encodeURIComponent ---
-        // 否则 url 里的 & 或 ? 会打断播放器参数
-        const finalSrc = PLAYER_URL + encodeURIComponent(url);
-        
-        console.log("播放地址:", finalSrc);
-        info.innerText = "播放: " + title;
-        
-        frame.src = finalSrc;
-    }
-
-    function closePlayer() {
-        document.getElementById('player-layer').style.display = 'none';
-        document.getElementById('playFrame').src = "";
-    }
-
-    window.onload = () => {
-        doSearch();
-    }
-</script>
-
+        // 延迟初始化，适配特斯拉车机加载节奏
+        window.onload = () => setTimeout(initPlayer, 300);
+    </script>
 </body>
 </html>
