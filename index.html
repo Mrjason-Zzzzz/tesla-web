@@ -3,6 +3,290 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LGCXS PRO 诊断版</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="//unpkg.com/xgplayer@2.31.6/browser/index.js"></script>
+    <script src="//unpkg.com/xgplayer-hls.js/dist/index.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        :root { --primary: #007aff; --bg: #000; --panel: #121212; --text: #fff; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; height: 100vh; overflow: hidden; display: flex; }
+        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+
+        /* 左侧 */
+        #sidebar { width: 220px; background: var(--panel); border-right: 1px solid #333; display: flex; flex-direction: column; z-index: 20; }
+        .header { padding: 20px; font-weight: bold; border-bottom: 1px solid #333; display:flex; align-items:center; gap:8px; }
+        #group-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .group-btn { padding: 12px; margin-bottom: 5px; border-radius: 6px; cursor: pointer; color: #888; display:flex; justify-content:space-between; }
+        .group-btn.active { background: var(--primary); color: #fff; }
+        
+        /* 底部诊断区 */
+        .debug-area { padding: 10px; border-top: 1px solid #333; }
+        .test-btn { width: 100%; background: #222; color: #4cd964; border: 1px solid #4cd964; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+
+        /* 中间 */
+        #middle { width: 260px; background: #1a1a1a; border-right: 1px solid #333; display: flex; flex-direction: column; }
+        .search-box { padding: 10px; border-bottom: 1px solid #333; }
+        input { width: 100%; background: #000; border: 1px solid #333; color: #fff; padding: 10px; border-radius: 6px; }
+        #channel-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .channel-item { padding: 12px; margin-bottom: 5px; background: rgba(255,255,255,0.05); border-radius: 6px; cursor: pointer; display:flex; align-items:center; gap:10px; }
+        .channel-item.active { border-left: 3px solid var(--primary); background: #333; }
+        .ch-logo { width: 30px; height: 30px; object-fit: contain; background:#000; border-radius:4px; }
+
+        /* 右侧 */
+        #stage { flex: 1; position: relative; background: #000; }
+        #player { width: 100%; height: 100%; }
+        
+        /* 错误提示层 */
+        #error-log { 
+            position: absolute; top: 10px; left: 10px; right: 10px; 
+            background: rgba(255,0,0,0.8); color: #fff; padding: 10px; 
+            border-radius: 8px; font-size: 12px; display: none; z-index: 100; pointer-events: none;
+        }
+
+        /* 手机端 */
+        #phone { display: none; height: 100vh; background: #eee; padding: 20px; color: #000; }
+
+        @media (max-width: 768px) { #sidebar, #middle { display: none; } }
+    </style>
+</head>
+<body>
+
+    <div id="phone">
+        <h2>📲 遥控器</h2>
+        <input type="text" id="urlInput" placeholder="粘贴链接..." style="background:#fff;border:1px solid #ccc;color:#000;">
+        <button onclick="send()" style="width:100%;margin-top:10px;padding:15px;background:var(--primary);color:#fff;border:none;border-radius:8px;">投屏</button>
+    </div>
+
+    <div id="sidebar">
+        <div class="header">LGCXS DIAGNOSIS</div>
+        <div id="group-list"></div>
+        <div class="debug-area">
+            <button class="test-btn" onclick="runSelfTest()">🧪 播放器自检 (点我测试)</button>
+            <div style="margin-top:5px;font-size:10px;color:#666;text-align:center">点击上方按钮，如果能播说明代码没问题</div>
+        </div>
+    </div>
+
+    <div id="middle">
+        <div class="search-box"><input type="text" id="search" placeholder="搜索..." oninput="search()"></div>
+        <div id="channel-list"></div>
+    </div>
+
+    <div id="stage">
+        <div id="error-log"></div>
+        <div id="player"></div>
+    </div>
+
+    <script>
+        const PROXY = 'https://cors.isteed.cc/';
+        
+        // 核心测试源：HLS.js 官方测试源 (绝对稳定)
+        const TEST_URL = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
+
+        // 你的源列表
+        const SOURCES = [
+            { name: "APTV 官方 (稳定)", url: "https://gh.aptv.app/https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u" },
+            { name: "YanG Gather", url: "https://tv.iill.top/m3u/Gather" },
+            { name: "fanmingming IPv6", url: "https://live.fanmingming.com/tv/m3u/ipv6.m3u" },
+            { name: "虎牙直播", url: "https://cdn.jsdelivr.net/gh/Kimentanm/aptv@master/m3u/ya.m3u" }
+        ];
+
+        let player = null;
+        let allChannels = [];
+        let currentGroup = "全部";
+
+        // 入口
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('mode') === 'sender') {
+            document.getElementById('phone').style.display = 'block';
+            initMqtt();
+        } else {
+            initCar();
+        }
+
+        function initCar() {
+            // 生成二维码逻辑省略，同前...
+            initMqtt();
+            // 默认加载第一个源
+            loadSource(SOURCES[0]); 
+            renderGroups(); // 初始渲染菜单
+        }
+
+        // 🧪 自检功能
+        window.runSelfTest = function() {
+            showError("正在进行自检... 尝试播放测试视频");
+            play(TEST_URL);
+            setTimeout(() => {
+                showError("自检完成：如果你看到画面，说明播放器正常。问题出在直播源上。", "#4cd964");
+            }, 3000);
+        }
+
+        // 加载源
+        async function loadSource(src) {
+            document.getElementById('channel-list').innerHTML = '<div style="padding:20px;text-align:center">加载中...</div>';
+            
+            try {
+                let url = src.url;
+                // 代理策略：Github/Gitee 强制走代理
+                if (url.includes('github') || url.includes('gitee')) {
+                    if (!url.includes('ghproxy') && !url.includes('aptv.app')) {
+                        url = PROXY + url;
+                    }
+                }
+
+                const res = await fetch(url);
+                if (!res.ok) throw new Error("网络请求失败");
+                const text = await res.text();
+                parseM3u(text);
+                renderGroups();
+            } catch (e) {
+                showError(`加载源失败: ${e.message}。请尝试点击“自检”按钮。`);
+            }
+        }
+
+        function parseM3u(text) {
+            allChannels = [];
+            const lines = text.split('\n');
+            let info = null;
+            lines.forEach(line => {
+                line = line.trim();
+                if (line.startsWith('#EXTINF')) {
+                    const g = line.match(/group-title="([^"]*)"/)?.[1] || '其他';
+                    const l = line.match(/tvg-logo="([^"]*)"/)?.[1] || '';
+                    const n = line.split(',').pop().trim();
+                    info = { name:n, group:g, logo:l };
+                } else if (!line.startsWith('#') && line && info) {
+                    allChannels.push({...info, url:line});
+                    info = null;
+                }
+            });
+        }
+
+        function renderGroups() {
+            const list = document.getElementById('group-list');
+            list.innerHTML = '';
+            
+            // 渲染源切换按钮
+            SOURCES.forEach(s => {
+                const btn = document.createElement('div');
+                btn.className = 'group-btn';
+                btn.innerText = "📡 " + s.name;
+                btn.onclick = () => loadSource(s);
+                list.appendChild(btn);
+            });
+
+            // 分割线
+            list.innerHTML += '<hr style="border:0;border-top:1px solid #333;margin:10px 0">';
+
+            // 渲染频道分组
+            const groups = {};
+            allChannels.forEach(c => groups[c.group] = (groups[c.group]||0)+1);
+            
+            Object.keys(groups).forEach(g => {
+                const btn = document.createElement('div');
+                btn.className = 'group-btn';
+                btn.innerHTML = `<span>${g}</span><span>${groups[g]}</span>`;
+                btn.onclick = (e) => {
+                    document.querySelectorAll('.group-btn').forEach(i=>i.classList.remove('active'));
+                    e.currentTarget.classList.add('active');
+                    renderChannels(g);
+                };
+                list.appendChild(btn);
+            });
+        }
+
+        function renderChannels(group) {
+            const list = document.getElementById('channel-list');
+            list.innerHTML = '';
+            const items = allChannels.filter(c => c.group === group);
+            
+            items.slice(0, 100).forEach(c => {
+                const div = document.createElement('div');
+                div.className = 'channel-item';
+                div.innerHTML = `<img class="ch-logo" src="${c.logo}" onerror="this.style.display='none'"><span>${c.name}</span>`;
+                div.onclick = () => play(c.url);
+                list.appendChild(div);
+            });
+        }
+
+        // 🔎 搜索
+        window.search = function() {
+            const val = document.getElementById('search').value.toLowerCase();
+            const list = document.getElementById('channel-list');
+            list.innerHTML = '';
+            const items = allChannels.filter(c => c.name.toLowerCase().includes(val)).slice(0, 100);
+            items.forEach(c => {
+                const div = document.createElement('div');
+                div.className = 'channel-item';
+                div.innerHTML = `<span>${c.name}</span> <span style="font-size:10px;color:#666">${c.group}</span>`;
+                div.onclick = () => play(c.url);
+                list.appendChild(div);
+            });
+        }
+
+        // ▶️ 播放核心
+        function play(url) {
+            document.getElementById('error-log').style.display = 'none'; // 隐藏旧错误
+            
+            // 混合内容检查：如果网页是HTTPS但视频是HTTP
+            if (window.location.protocol === 'https:' && url.startsWith('http:')) {
+                showError("⚠️ 安全阻断：无法在 HTTPS 网页播放 HTTP 视频。请尝试使用支持 HTTPS 的源（如 APTV 官方源）。");
+                // 尝试用代理转为 HTTPS
+                console.log("尝试使用代理升级协议...");
+                url = PROXY + url;
+            }
+
+            if (!player) {
+                player = new Player({
+                    id: 'player',
+                    url: url,
+                    playsinline: true,
+                    autoplay: true,
+                    fluid: true,
+                    plugins: [window.HlsJsPlugin],
+                    cssFullscreen: true,
+                    width: '100%',
+                    height: '100%'
+                });
+                
+                // 监听错误
+                player.on('error', (e) => {
+                    console.error(e);
+                    showError("❌ 播放失败：源可能已失效或跨域被拦截。请尝试切换其他源。");
+                });
+
+                player.once('play', () => player.getCssFullscreen());
+            } else {
+                player.src = url;
+                player.reload();
+                player.play();
+            }
+        }
+
+        function showError(msg, color = 'rgba(255,0,0,0.8)') {
+            const el = document.getElementById('error-log');
+            el.innerText = msg;
+            el.style.backgroundColor = color;
+            el.style.display = 'block';
+        }
+
+        // MQTT 初始化 (省略部分代码，同前，只为了保持完整性)
+        function initMqtt() {
+            const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+            const topic = 'lgcxs/car/test'; // 简化的topic方便测试
+            client.on('connect', () => client.subscribe(topic));
+            client.on('message', (t, m) => play(m.toString()));
+            window.send = () => client.publish(topic, document.getElementById('urlInput').value);
+        }
+    </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>LGCXS PRO (稳定版)</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
