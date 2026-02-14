@@ -100,57 +100,80 @@
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
 
     <script>
-        // 金鹰资源接口配置（核心）
+        // 🔥 核心修改：替换稳定CORS代理 + 补充浏览器请求头
         const CONFIG = {
-            proxy: "https://api.allorigins.win/get?url=", // CORS跨域代理
-            collectApi: "https://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json", // 视频列表接口
-            detailApi: "https://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json?ac=detail&ids=", // 视频详情（获取播放地址）
-            parseApi: "https://hd.iapijy.com/play?url=", // M3U8解析接口
-            backupCollectApi: "http://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json" // 备用列表接口（去掉s）
+            // 替换为更稳定的CORS代理（规避Cloudflare拦截）
+            proxy: "https://corsproxy.io/?",
+            collectApi: "https://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json",
+            detailApi: "https://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json?ac=detail&ids=",
+            parseApi: "https://hd.iapijy.com/play?url=",
+            backupCollectApi: "http://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json"
+        };
+
+        // 浏览器请求头（模拟真人访问，规避Cloudflare风控）
+        const REQUEST_HEADERS = {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            'Referer': 'https://jinyingzy.com/',
+            'Cache-Control': 'no-cache'
         };
 
         let dp = null; // 播放器实例
         let allVideos = []; // 所有视频数据
         let currentType = 'all'; // 当前选中分类
 
-        // 🔥 核心：特斯拉D挡绕过逻辑（行驶中不暂停）
+        // 特斯拉D挡绕过逻辑（行驶中不暂停）
         function bypassTeslaDRestriction() {
-            // 拦截视频pause事件，强制播放
             document.addEventListener('pause', function(e) {
                 if (e.target.tagName === 'VIDEO' && window.navigator.userAgent.includes('Tesla')) {
                     e.preventDefault();
                     e.target.play();
                 }
             }, true);
-            // 适配特斯拉视频播放规则
             const video = document.createElement('video');
             video.setAttribute('playsinline', 'true');
             video.setAttribute('webkit-playsinline', 'true');
         }
 
-        // 采集视频列表（通过CORS代理，兼容HTTPS/HTTP）
+        // 采集视频列表（优化请求头 + 稳定代理）
         async function collectVideos() {
             document.getElementById('listLoading').style.display = 'block';
             document.getElementById('videoList').style.display = 'none';
             document.getElementById('listError').style.display = 'none';
 
             try {
-                // 优先调用HTTPS接口
-                let response = await fetch(CONFIG.proxy + encodeURIComponent(CONFIG.collectApi), { timeout: 15000 });
+                // 拼接代理地址 + 补充请求头
+                const requestUrl = CONFIG.proxy + encodeURIComponent(CONFIG.collectApi);
+                let response = await fetch(requestUrl, { 
+                    timeout: 20000,
+                    headers: REQUEST_HEADERS,
+                    method: 'GET',
+                    credentials: 'omit' // 避免Cookie触发风控
+                });
+
                 if (!response.ok) throw new Error('HTTPS采集失败，切换HTTP');
                 
                 let data = await response.json();
-                let parsedData = JSON.parse(data.contents); // 解析代理返回的内容
+                // 兼容不同代理的返回格式
+                let parsedData = data.contents ? JSON.parse(data.contents) : data;
                 if (!parsedData.list || parsedData.list.length === 0) throw new Error('无数据，切换备用接口');
 
                 allVideos = parsedData.list;
-                renderVideoList(currentType); // 渲染当前分类视频
+                renderVideoList(currentType);
             } catch (e) {
                 // 切换备用HTTP接口
                 try {
-                    const backupResponse = await fetch(CONFIG.proxy + encodeURIComponent(CONFIG.backupCollectApi), { timeout: 15000 });
+                    const backupUrl = CONFIG.proxy + encodeURIComponent(CONFIG.backupCollectApi);
+                    const backupResponse = await fetch(backupUrl, { 
+                        timeout: 20000,
+                        headers: REQUEST_HEADERS,
+                        method: 'GET',
+                        credentials: 'omit'
+                    });
+
                     const backupData = await backupResponse.json();
-                    const parsedBackupData = JSON.parse(backupData.contents);
+                    const parsedBackupData = backupData.contents ? JSON.parse(backupData.contents) : backupData;
                     if (!parsedBackupData.list || parsedBackupData.list.length === 0) throw new Error('备用接口无数据');
 
                     allVideos = parsedBackupData.list;
@@ -163,36 +186,32 @@
             }
         }
 
-        // 渲染视频列表（支持分类+搜索）
+        // 渲染视频列表（分类+搜索）
         function renderVideoList(type, searchKeyword = '') {
             document.getElementById('listLoading').style.display = 'none';
             const list = document.getElementById('videoList');
             list.innerHTML = "";
 
-            // 1. 按分类过滤（严格对齐接口type_name）
             let filteredVideos = type === 'all' 
                 ? allVideos 
                 : allVideos.filter(video => video.type_name === type);
 
-            // 2. 按搜索关键词过滤（模糊匹配+大小写不敏感）
             if (searchKeyword) {
                 filteredVideos = filteredVideos.filter(video => 
                     video.vod_name.toLowerCase().includes(searchKeyword.toLowerCase())
                 );
             }
 
-            // 无结果提示
             if (filteredVideos.length === 0) {
                 list.innerHTML = '<div style="text-align:center; color:#999; margin-top:20px;">该分类暂无视频或未找到匹配结果</div>';
                 list.style.display = 'block';
                 return;
             }
 
-            // 渲染视频项
             filteredVideos.forEach(video => {
                 const itemDiv = document.createElement('div');
                 itemDiv.className = 'video-item';
-                itemDiv.onclick = () => playVideo(video.vod_id, video.vod_name); // 点击播放
+                itemDiv.onclick = () => playVideo(video.vod_id, video.vod_name);
 
                 const title = document.createElement('div');
                 title.className = 'video-title';
@@ -210,31 +229,35 @@
             list.style.display = 'block';
         }
 
-        // 解析并播放视频（先获取详情接口的真实播放地址）
+        // 解析播放视频（优化请求头）
         async function playVideo(vodId, vodName) {
             document.getElementById('playLoading').style.display = 'block';
             document.getElementById('videoList').style.display = 'none';
             document.getElementById('dplayer').style.display = 'block';
             document.getElementById('backBtn').style.display = 'block';
 
-            // 初始化D挡绕过逻辑
             bypassTeslaDRestriction();
 
             try {
-                // 1. 调用详情接口获取真实播放地址（列表接口vod_play_url为空）
-                const detailUrl = CONFIG.detailApi + vodId;
-                const detailResponse = await fetch(CONFIG.proxy + encodeURIComponent(detailUrl), { timeout: 15000 });
+                // 获取真实播放地址
+                const detailUrl = CONFIG.proxy + encodeURIComponent(CONFIG.detailApi + vodId);
+                const detailResponse = await fetch(detailUrl, { 
+                    timeout: 20000,
+                    headers: REQUEST_HEADERS,
+                    method: 'GET',
+                    credentials: 'omit'
+                });
+
                 const detailData = await detailResponse.json();
-                const parsedDetailData = JSON.parse(detailData.contents);
+                const parsedDetailData = detailData.contents ? JSON.parse(detailData.contents) : detailData;
                 const playUrl = parsedDetailData.list[0].vod_play_url.split("$")[1] || "";
 
                 if (!playUrl) throw new Error('未获取到播放地址');
 
-                // 2. 拼接解析接口地址
+                // 拼接解析地址
                 const parseUrl = CONFIG.parseApi + encodeURIComponent(playUrl);
                 
-                // 3. 初始化播放器
-                if (dp) dp.destroy(); // 销毁旧播放器
+                if (dp) dp.destroy();
                 dp = new DPlayer({
                     container: document.getElementById('dplayer'),
                     autoplay: true,
@@ -248,9 +271,7 @@
                     }
                 });
 
-                // 加载完成隐藏提示
                 dp.on('ready', () => { document.getElementById('playLoading').style.display = 'none'; });
-                // 播放错误处理
                 dp.on('error', () => {
                     document.getElementById('playLoading').style.display = 'none';
                     alert(`《${vodName}》播放失败，可换其他视频试试`);
@@ -263,40 +284,37 @@
             }
         }
 
-        // 返回视频列表
+        // 返回列表
         function backToList() {
-            if (dp) dp.destroy(); // 销毁播放器
+            if (dp) dp.destroy();
             document.getElementById('dplayer').style.display = 'none';
             document.getElementById('backBtn').style.display = 'none';
             document.getElementById('playLoading').style.display = 'none';
             document.getElementById('videoList').style.display = 'block';
         }
 
-        // 绑定分类标签切换事件
+        // 绑定分类事件
         function bindCategoryTabs() {
             const tabs = document.querySelectorAll('.category-tab');
             tabs.forEach(tab => {
                 tab.addEventListener('click', () => {
-                    // 切换激活状态
                     tabs.forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
-                    // 更新当前分类并重新渲染
                     currentType = tab.dataset.type;
                     renderVideoList(currentType);
-                    // 清空搜索框
                     document.getElementById('searchInput').value = '';
                 });
             });
         }
 
-        // 绑定搜索事件（点击/回车）
+        // 绑定搜索事件
         function bindSearch() {
             const searchBtn = document.getElementById('searchBtn');
             const searchInput = document.getElementById('searchInput');
 
             const doSearch = () => {
                 const keyword = searchInput.value.trim();
-                renderVideoList(currentType, keyword); // 在当前分类下搜索
+                renderVideoList(currentType, keyword);
             };
 
             searchBtn.addEventListener('click', doSearch);
@@ -305,12 +323,11 @@
             });
         }
 
-        // 页面初始化
+        // 初始化
         window.onload = () => {
-            bindCategoryTabs(); // 绑定分类切换
-            bindSearch(); // 绑定搜索
-            collectVideos(); // 加载视频列表
-            // 加载失败重试
+            bindCategoryTabs();
+            bindSearch();
+            collectVideos();
             document.getElementById('listError').addEventListener('click', collectVideos);
         };
     </script>
