@@ -11,6 +11,28 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #000; color: #fff; font-family: sans-serif; padding: 20px; }
         .title { font-size: 22px; margin-bottom: 20px; text-align: center; }
+        /* 搜索框样式 */
+        .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
+        #searchInput { 
+            flex: 1; 
+            padding: 12px 15px; 
+            border: 1px solid #333; 
+            border-radius: 8px; 
+            background: #111; 
+            color: #fff; 
+            font-size: 16px; 
+            height: 48px;
+        }
+        #searchBtn { 
+            padding: 0 20px; 
+            border: none; 
+            border-radius: 8px; 
+            background: #0071e3; 
+            color: #fff; 
+            font-size: 16px; 
+            cursor: pointer; 
+            height: 48px;
+        }
         /* 分类标签 */
         .category-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 10px; }
         .category-tab { padding: 8px 15px; background: #111; border: 1px solid #333; border-radius: 20px; font-size: 14px; cursor: pointer; white-space: nowrap; }
@@ -48,16 +70,22 @@
 </head>
 <body>
     <h1 class="title">特斯拉金鹰观影</h1>
-    <!-- 分类标签 -->
+    <!-- 搜索框 -->
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="输入影片名称搜索...">
+        <button id="searchBtn">搜索</button>
+    </div>
+    <!-- 分类标签（匹配官网导航） -->
     <div class="category-tabs" id="categoryTabs">
         <div class="category-tab active" data-type="all">全部</div>
-        <div class="category-tab" data-type="篮球">篮球</div>
-        <div class="category-tab" data-type="足球">足球</div>
-        <div class="category-tab" data-type="短剧">短剧</div>
-        <div class="category-tab" data-type="日本动漫">日本动漫</div>
-        <div class="category-tab" data-type="剧情片">剧情片</div>
+        <div class="category-tab" data-type="电视剧">电视剧</div>
+        <div class="category-tab" data-type="电影">电影</div>
+        <div class="category-tab" data-type="动漫">动漫</div>
         <div class="category-tab" data-type="综艺">综艺</div>
-        <div class="category-tab" data-type="日剧">日剧</div>
+        <div class="category-tab" data-type="短剧">短剧</div>
+        <div class="category-tab" data-type="伦理片">伦理片</div>
+        <div class="category-tab" data-type="体育赛事">体育赛事</div>
+        <div class="category-tab" data-type="预告片">预告片</div>
     </div>
     <!-- 视频列表 -->
     <div class="loading-tips" id="listLoading">正在加载视频列表...</div>
@@ -87,6 +115,7 @@
 
         let dp = null; // 播放器实例
         let allVideos = []; // 所有视频数据
+        let currentType = 'all'; // 当前选中的分类
 
         // 绕过特斯拉D挡限制（核心逻辑）
         function bypassTeslaDRestriction() {
@@ -117,7 +146,7 @@
                 if (!parsedData.list || parsedData.list.length === 0) throw new Error('无数据，切换备用接口');
 
                 allVideos = parsedData.list;
-                renderVideoList('all'); // 默认显示全部
+                renderVideoList(currentType); // 按当前分类显示
             } catch (e) {
                 // 切换备用接口（去掉s，通过代理）
                 try {
@@ -127,7 +156,7 @@
                     if (!parsedBackupData.list || parsedBackupData.list.length === 0) throw new Error('备用接口无数据');
 
                     allVideos = parsedBackupData.list;
-                    renderVideoList('all');
+                    renderVideoList(currentType);
                 } catch (backupErr) {
                     document.getElementById('listLoading').style.display = 'none';
                     document.getElementById('listError').style.display = 'block';
@@ -136,19 +165,26 @@
             }
         }
 
-        // 渲染视频列表（支持分类）
-        function renderVideoList(type) {
+        // 渲染视频列表（支持分类+搜索）
+        function renderVideoList(type, searchKeyword = '') {
             document.getElementById('listLoading').style.display = 'none';
             const list = document.getElementById('videoList');
             list.innerHTML = "";
 
-            // 过滤分类视频
-            const filteredVideos = type === 'all' 
+            // 先按分类过滤
+            let filteredVideos = type === 'all' 
                 ? allVideos 
                 : allVideos.filter(video => video.type_name === type);
 
+            // 再按搜索关键词过滤（支持模糊匹配）
+            if (searchKeyword) {
+                filteredVideos = filteredVideos.filter(video => 
+                    video.vod_name.toLowerCase().includes(searchKeyword.toLowerCase())
+                );
+            }
+
             if (filteredVideos.length === 0) {
-                list.innerHTML = '<div style="text-align:center; color:#999; margin-top:20px;">该分类暂无视频</div>';
+                list.innerHTML = '<div style="text-align:center; color:#999; margin-top:20px;">该分类暂无视频或未找到匹配结果</div>';
                 list.style.display = 'block';
                 return;
             }
@@ -247,15 +283,37 @@
                     // 切换激活状态
                     tabs.forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
-                    // 渲染对应分类
-                    renderVideoList(tab.dataset.type);
+                    // 更新当前分类并重新渲染
+                    currentType = tab.dataset.type;
+                    renderVideoList(currentType);
                 });
+            });
+        }
+
+        // 绑定搜索事件
+        function bindSearch() {
+            const searchBtn = document.getElementById('searchBtn');
+            const searchInput = document.getElementById('searchInput');
+
+            // 点击搜索按钮
+            searchBtn.addEventListener('click', () => {
+                const keyword = searchInput.value.trim();
+                renderVideoList(currentType, keyword);
+            });
+
+            // 回车搜索
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const keyword = searchInput.value.trim();
+                    renderVideoList(currentType, keyword);
+                }
             });
         }
 
         // 页面加载初始化
         window.onload = () => {
             bindCategoryTabs();
+            bindSearch();
             collectVideos();
             // 加载失败重试
             document.getElementById('listError').addEventListener('click', collectVideos);
