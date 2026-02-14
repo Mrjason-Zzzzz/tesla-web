@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>LGCXS PRO (Tesla OS)</title>
     
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
@@ -122,9 +123,18 @@
     </div>
 
     <script>
-        // === 🚀 强力代理 (解决视频流 HTTP 混用问题) ===
+        // === 🚀 核心配置 ===
         const PROXY = 'https://corsproxy.io/?';
+        // 请求头（规避Cloudflare拦截，适配特斯拉车机）
+        const REQUEST_HEADERS = {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            'Referer': 'https://lgcxs.pro/',
+            'Cache-Control': 'no-cache'
+        };
 
+        // === 📚 资源库配置 ===
         const DB = [
             { title: "🎬 影视点播 (搜索/点播)", items: [
                 { name: "IKUN 资源", url: "https://ikunzy.com/api.php/provide/vod", type: "cms", tag: "极速" },
@@ -145,13 +155,29 @@
         let currentType = "m3u";
         let allChannels = [];
 
-        // 初始化
+        // === 🔥 特斯拉核心适配：D挡播放不暂停 ===
+        function initTeslaPlayFix() {
+            // 拦截车机触发的视频暂停事件
+            document.addEventListener('pause', (e) => {
+                if (e.target.tagName === 'VIDEO' && navigator.userAgent.includes('Tesla')) {
+                    e.preventDefault();
+                    e.target.play();
+                }
+            }, true);
+            // 强制开启inline播放（特斯拉车机要求）
+            const video = document.createElement('video');
+            video.setAttribute('playsinline', 'true');
+            video.setAttribute('webkit-playsinline', 'true');
+        }
+
+        // === 初始化 ===
         const mqttBroker = 'wss://broker.emqx.io:8084/mqtt';
         const getUuid = () => Math.random().toString(36).substring(2, 9);
-        const channelId = new URLSearchParams(location.search).get('id') || getUuid();
+        const urlParams = new URLSearchParams(location.search);
+        const channelId = urlParams.get('id') || getUuid();
         const topic = `lgcxs/car/${channelId}`;
 
-        if (new URLSearchParams(location.search).get('mode') === 'sender') {
+        if (urlParams.get('mode') === 'sender') {
             document.getElementById('phone').style.display = 'block';
             initMqtt();
         } else {
@@ -159,15 +185,16 @@
         }
 
         function initCar() {
-            // 特斯拉D挡优化
-            document.addEventListener('pause', (e) => {
-                if (e.target.tagName === 'VIDEO') { e.preventDefault(); e.target.play(); }
-            }, true);
-
-            const url = `${location.origin}${location.pathname}?mode=sender&id=${channelId}`;
-            new QRCode(document.getElementById("qrcode"), { text: url, width: 180, height: 180 });
+            // 初始化特斯拉播放保护
+            initTeslaPlayFix();
+            
+            // 生成投屏二维码
+            const remoteUrl = `${location.origin}${location.pathname}?mode=sender&id=${channelId}`;
+            new QRCode(document.getElementById("qrcode"), { text: remoteUrl, width: 180, height: 180 });
+            
+            // 渲染资源库+默认加载直播源
             renderModal();
-            loadSource(DB[1].items[0]); // 默认加载 APTV
+            loadSource(DB[1].items[0]); 
             initMqtt();
         }
 
@@ -201,27 +228,32 @@
 
             try {
                 if (src.type === 'cms') {
-                    // CMS 模式：加载最新视频
                     loadCMSList(src.url);
                 } else {
-                    // M3U 模式：加载直播列表
                     loadM3UList(src.url);
                 }
             } catch (e) {
                 showToast("加载失败，请换源");
+                console.error('加载资源失败:', e);
             }
         }
 
-        // === CMS 智能解析 (XML转JSON) ===
+        // === CMS 智能解析 (带超时+正则优化) ===
         async function loadCMSList(apiUrl, keyword = '') {
+            // 超时控制函数
+            const fetchWithTimeout = (url, options = {}, timeout = 20000) => {
+                return Promise.race([
+                    fetch(url, options),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('请求超时')), timeout))
+                ]);
+            };
+
             let reqUrl = apiUrl + '?ac=list&pg=1';
             if (keyword) reqUrl = apiUrl + '?ac=list&wd=' + encodeURIComponent(keyword);
-            
-            // 强制走代理，解决 XML 跨域问题
             const finalUrl = PROXY + encodeURIComponent(reqUrl);
 
             try {
-                const res = await fetch(finalUrl);
+                const res = await fetchWithTimeout(finalUrl, { headers: REQUEST_HEADERS });
                 const text = await res.text();
                 const parser = new DOMParser();
                 const xmlDoc = parser.parseFromString(text, "text/xml");
@@ -229,8 +261,6 @@
 
                 const el = document.getElementById('channel-list');
                 el.innerHTML = '';
-                
-                // CMS 模式下左侧显示状态
                 document.getElementById('group-list').innerHTML = `<div class="group-item active" style="text-align:center"><span>${keyword?'搜索结果':'最新更新'}</span></div>`;
 
                 if (videos.length === 0) {
@@ -240,10 +270,10 @@
 
                 for (let i = 0; i < videos.length; i++) {
                     const v = videos[i];
-                    const name = v.getElementsByTagName("name")[0]?.textContent;
-                    const type = v.getElementsByTagName("type")[0]?.textContent;
+                    const name = v.getElementsByTagName("name")[0]?.textContent || '未知影片';
+                    const type = v.getElementsByTagName("type")[0]?.textContent || '影视';
                     const id = v.getElementsByTagName("id")[0]?.textContent;
-                    const time = v.getElementsByTagName("last")[0]?.textContent;
+                    const time = v.getElementsByTagName("last")[0]?.textContent || '未知时间';
 
                     const div = document.createElement('div');
                     div.className = 'channel-item';
@@ -254,53 +284,67 @@
                         </div>
                         <i class="ph-bold ph-play-circle" style="font-size:24px;color:#666"></i>
                     `;
-                    div.onclick = () => fetchCMSDetail(id);
+                    div.onclick = () => id && fetchCMSDetail(id);
                     el.appendChild(div);
                 }
             } catch (e) {
-                console.error(e);
-                showToast("资源站响应超时");
+                console.error('CMS加载失败:', e);
+                showToast(e.message || "资源站响应超时");
             }
         }
 
-        // 获取 CMS 视频详情及播放地址
+        // 获取 CMS 视频详情及播放地址 (正则优化)
         async function fetchCMSDetail(id) {
             showToast("正在解析播放地址...");
+            const fetchWithTimeout = (url, options = {}, timeout = 20000) => {
+                return Promise.race([
+                    fetch(url, options),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('解析超时')), timeout))
+                ]);
+            };
+
             const reqUrl = `${currentApiUrl}?ac=detail&ids=${id}`;
             const finalUrl = PROXY + encodeURIComponent(reqUrl);
 
             try {
-                const res = await fetch(finalUrl);
+                const res = await fetchWithTimeout(finalUrl, { headers: REQUEST_HEADERS });
                 const text = await res.text();
                 
-                // 正则暴力匹配 m3u8 链接 (比 XML 解析更兼容)
-                // 格式通常是: ...$https://abc.com/1.m3u8#...
-                const matches = text.match(/(https?:\/\/[^"'$#]+\.m3u8)/g);
+                // 优化正则：匹配有效的M3U8链接（排除片段M3U8）
+                const m3u8Regex = /https?:\/\/[^\s"'$#]+?\.m3u8(?:\?[^"'$#]*)?/gi;
+                const matches = text.match(m3u8Regex);
                 
                 if (matches && matches.length > 0) {
-                    // 默认取第一个 m3u8 (有些片源有多个线路)
-                    let playUrl = matches[0];
-                    playUrl = playUrl.replace(/amp;/g, ''); // 清理转义符
-                    console.log("Play URL:", playUrl);
+                    // 过滤无效链接（如包含chunk、segment的片段链接）
+                    const validUrls = matches.filter(url => !url.includes('chunk') && !url.includes('segment'));
+                    let playUrl = validUrls.length > 0 ? validUrls[0] : matches[0];
+                    playUrl = playUrl.replace(/amp;/g, '').trim();
                     play(playUrl);
                 } else {
                     showToast("该影片暂无 M3U8 资源");
                 }
             } catch (e) {
-                showToast("解析失败");
+                console.error('CMS解析失败:', e);
+                showToast(e.message || "解析失败");
             }
         }
 
-        // === M3U 逻辑 ===
+        // === M3U 逻辑 (带超时) ===
         async function loadM3UList(url) {
+            const fetchWithTimeout = (url, options = {}, timeout = 20000) => {
+                return Promise.race([
+                    fetch(url, options),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('请求超时')), timeout))
+                ]);
+            };
+
             let reqUrl = url;
-            // Github/Gitee 强制代理
             if (url.includes('github') || url.includes('gitee')) {
                 if(!url.includes('ghproxy') && !url.includes('aptv.app')) reqUrl = PROXY + encodeURIComponent(url);
             }
 
             try {
-                const res = await fetch(reqUrl);
+                const res = await fetchWithTimeout(reqUrl, { headers: REQUEST_HEADERS });
                 const text = await res.text();
                 
                 allChannels = [];
@@ -319,7 +363,8 @@
                 });
                 renderM3UGroups();
             } catch (e) {
-                showToast("直播源加载失败");
+                console.error('M3U加载失败:', e);
+                showToast(e.message || "直播源加载失败");
             }
         }
 
@@ -370,13 +415,15 @@
             });
         }
 
-        // === 播放核心 (混合内容修复) ===
+        // === 播放核心 (特斯拉深度适配) ===
         function play(url) {
+            // 再次触发特斯拉D挡播放保护
+            initTeslaPlayFix();
+            
             document.getElementById('standby').style.display = 'none';
             document.getElementById('toast').style.display = 'none';
 
-            // ⚠️ 关键修复：如果当前页面是 HTTPS 但视频是 HTTP，强制走代理
-            // 否则浏览器会报错 blocked: mixed-content
+            // 混合内容修复：HTTPS页面加载HTTP视频自动走代理
             if (location.protocol === 'https:' && url.startsWith('http:')) {
                 showToast("正在通过安全隧道连接...");
                 url = PROXY + encodeURIComponent(url);
@@ -384,44 +431,92 @@
 
             if(!player) {
                 player = new Player({
-                    id:'player', url, playsinline:true, autoplay:true, fluid:true,
-                    plugins:[window.HlsJsPlugin], cssFullscreen:true, width:'100%', height:'100%',
-                    playbackRate: [0.75, 1, 1.25, 1.5, 2]
+                    id:'player', 
+                    url, 
+                    playsinline:true,  // 强制inline播放（特斯拉要求）
+                    webkit-playsinline:true,
+                    autoplay:true, 
+                    fluid:true,
+                    plugins:[window.HlsJsPlugin], 
+                    cssFullscreen:true, 
+                    width:'100%', 
+                    height:'100%',
+                    playbackRate: [0.75, 1, 1.25, 1.5, 2],
+                    // 特斯拉音量/播放优化
+                    volume: 0.7,
+                    muted: false
                 });
                 player.on('error', () => showToast("播放失败：源无效或超时"));
                 player.once('play', ()=>player.getCssFullscreen());
             } else {
-                player.src = url; player.reload(); player.play();
+                player.src = url; 
+                player.reload(); 
+                player.play();
             }
         }
 
+        // === 辅助函数 ===
         function handleSearch() {
-            const wd = document.getElementById('search').value;
+            const wd = document.getElementById('search').value.trim();
             if (!wd) return;
             if (currentType === 'cms') {
                 loadCMSList(currentApiUrl, wd);
             } else {
-                const res = allChannels.filter(c => c.name.includes(wd));
+                const res = allChannels.filter(c => c.name.toLowerCase().includes(wd.toLowerCase()));
                 renderM3UChannels(res);
             }
         }
 
         function showToast(msg) {
             const t = document.getElementById('toast');
-            t.innerText = msg; t.style.display = 'block';
-            setTimeout(()=>t.style.display='none', 3000);
+            t.innerText = msg; 
+            t.style.display = 'block';
+            setTimeout(()=>t.style.display='none', 3500);
         }
 
-        function toggleStandby() { const s = document.getElementById('standby'); s.style.display = s.style.display==='none'?'flex':'none'; }
-        function toggleModal(show) { document.getElementById('modal').style.display = show?'flex':'none'; }
+        function toggleStandby() { 
+            const s = document.getElementById('standby'); 
+            s.style.display = s.style.display==='none'?'flex':'none'; 
+        }
 
+        function toggleModal(show) { 
+            document.getElementById('modal').style.display = show?'flex':'none'; 
+        }
+
+        // === MQTT 投屏 (稳定版) ===
         function initMqtt() {
-            const client = mqtt.connect(mqttBroker);
-            client.on('connect', () => client.subscribe(topic));
-            client.on('message', (t, m) => play(m.toString()));
+            const client = mqtt.connect(mqttBroker, {
+                keepalive: 60,        // 心跳间隔
+                reconnectPeriod: 1000, // 重连间隔
+                timeout: 10000,       // 连接超时
+                clean: true
+            });
+            
+            client.on('connect', () => {
+                client.subscribe(topic);
+                if (urlParams.get('mode') === 'sender') showToast("已连接车机");
+            });
+            
+            client.on('message', (t, m) => {
+                const url = m.toString().trim();
+                if (url) play(url);
+            });
+            
+            client.on('error', (e) => {
+                console.error('MQTT连接失败:', e);
+                if (urlParams.get('mode') === 'sender') showToast("投屏连接失败");
+            });
+
+            // 手机端发送投屏指令（优化体验）
             window.send = () => {
                 const u = document.getElementById('urlInput').value.trim();
-                if(u) { client.publish(topic, u); alert('已投送'); }
+                if(u) { 
+                    client.publish(topic, u); 
+                    showToast("投屏指令已发送");
+                    document.getElementById('urlInput').value = ''; // 清空输入框
+                } else {
+                    showToast("请输入有效的播放链接");
+                }
             }
         }
     </script>
