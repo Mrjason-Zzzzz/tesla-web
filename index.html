@@ -3,249 +3,581 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>车载电视 Ultimate</title>
+    <title>LGCXS PRO 2026</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="//unpkg.com/xgplayer@2.31.6/browser/index.js"></script>
     <script src="//unpkg.com/xgplayer-hls.js/dist/index.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; height: 100vh; display: flex; }
+        :root {
+            --bg-root: #000000;
+            --bg-sidebar: #121212;
+            --bg-list: #1e1e1e;
+            --primary: #007aff; /* 极氪蓝/宝马蓝风格 */
+            --accent: #ff3b30;
+            --text-main: #ffffff;
+            --text-muted: #8e8e93;
+            --border: #333;
+        }
+
+        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; background: var(--bg-root); color: var(--text-main); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", sans-serif; height: 100vh; overflow: hidden; display: flex; }
+
+        /* === 1. 左侧导航 (源+分组) === */
+        #sidebar {
+            width: 240px;
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; z-index: 30;
+            box-shadow: 4px 0 20px rgba(0,0,0,0.3);
+        }
+
+        .brand-area {
+            padding: 25px 20px; font-size: 20px; font-weight: 800; letter-spacing: 1px;
+            background: linear-gradient(90deg, #007aff, #00c6ff); -webkit-background-clip: text; color: transparent;
+            display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border);
+        }
+
+        .source-selector { padding: 15px; border-bottom: 1px solid var(--border); }
+        #source-btn {
+            width: 100%; background: #2c2c2e; color: #fff; border: 1px solid #3a3a3c;
+            padding: 14px; border-radius: 10px; font-size: 14px; font-weight: 600;
+            cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+            transition: 0.2s;
+        }
+        #source-btn:active { background: #3a3a3c; transform: scale(0.98); }
+
+        #group-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .group-label { font-size: 12px; color: #666; margin: 15px 10px 5px; font-weight: bold; }
         
-        /* 侧边栏：分组+频道 */
-        #sidebar { width: 220px; height: 100%; background: #1a1a1a; display: flex; flex-direction: column; border-right: 1px solid #333; z-index: 20; }
-        
-        /* 分组标签栏 */
-        #group-tabs { display: flex; overflow-x: auto; background: #222; padding: 5px; border-bottom: 1px solid #333; height: 40px; align-items: center; }
-        .group-tab { padding: 5px 10px; margin-right: 5px; font-size: 12px; white-space: nowrap; cursor: pointer; color: #888; border-radius: 4px; }
-        .group-tab.active { background: #e50914; color: #fff; }
-        
-        /* 频道列表 */
+        .group-item {
+            padding: 14px 15px; margin-bottom: 4px; border-radius: 8px; cursor: pointer;
+            color: var(--text-muted); font-size: 15px; display: flex; justify-content: space-between;
+            transition: 0.2s;
+        }
+        .group-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+        .group-item.active { background: var(--primary); color: #fff; font-weight: bold; box-shadow: 0 4px 12px rgba(0,122,255,0.3); }
+        .badge { background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+
+        /* === 2. 中间列表 (搜索+频道) === */
+        #middle-panel {
+            width: 300px; background: var(--bg-list); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; transition: width 0.3s;
+        }
+
+        .search-area { padding: 15px; border-bottom: 1px solid var(--border); }
+        .search-input-wrap {
+            position: relative; background: #2c2c2e; border-radius: 10px; display: flex; align-items: center;
+            border: 1px solid transparent; transition: 0.2s;
+        }
+        .search-input-wrap:focus-within { border-color: var(--primary); background: #000; }
+        .search-icon { padding-left: 12px; color: var(--text-muted); }
+        #search-input {
+            width: 100%; background: transparent; border: none; color: #fff;
+            padding: 14px 10px; font-size: 15px;
+        }
+
         #channel-list { flex: 1; overflow-y: auto; padding: 10px; }
-        .channel-item { padding: 10px; margin-bottom: 5px; background: #2a2a2a; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: all 0.2s; }
-        .channel-item:hover, .channel-item.active { background: #e50914; transform: translateX(5px); }
-        .channel-logo { width: 30px; height: 30px; margin-right: 10px; object-fit: contain; border-radius: 4px; background: rgba(255,255,255,0.1); }
-        .channel-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        
+        .channel-card {
+            display: flex; align-items: center; padding: 14px; margin-bottom: 8px;
+            background: rgba(255,255,255,0.03); border-radius: 10px; cursor: pointer;
+            transition: 0.2s; border-left: 4px solid transparent;
+        }
+        .channel-card:hover { background: rgba(255,255,255,0.08); }
+        .channel-card.active { background: #333; border-left-color: var(--primary); }
+        
+        .ch-logo { 
+            width: 44px; height: 44px; border-radius: 8px; background: #000; 
+            object-fit: contain; margin-right: 14px; flex-shrink: 0; 
+            border: 1px solid #333;
+        }
+        .ch-info { overflow: hidden; flex: 1; }
+        .ch-name { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #eee; }
+        .ch-epg { font-size: 12px; color: #666; margin-top: 4px; }
 
-        /* 底部工具 */
-        .toolbar { padding: 10px; background: #111; text-align: center; font-size: 12px; color: #666; cursor: pointer; border-top: 1px solid #333; }
-
-        /* 播放区 */
-        #main { flex: 1; position: relative; }
+        /* === 3. 右侧舞台 === */
+        #stage { flex: 1; position: relative; background: #000; }
         #player { width: 100%; height: 100%; }
+
+        /* 待机屏 */
+        #standby-screen {
+            position: absolute; inset: 0;
+            background: radial-gradient(circle at center, #1c1c1e 0%, #000 100%);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10;
+        }
+        #qrcode-wrap { padding: 15px; background: #fff; border-radius: 18px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+        .standby-info { text-align: center; margin-top: 30px; opacity: 0.8; }
+        .standby-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+        .capsule { 
+            display: inline-flex; align-items: center; gap: 6px; 
+            background: rgba(255,255,255,0.1); padding: 6px 16px; 
+            border-radius: 20px; font-size: 13px; color: #bbb; 
+        }
+
+        /* 悬浮工具栏 */
+        .float-bar {
+            position: absolute; bottom: 30px; right: 30px;
+            display: flex; gap: 15px; z-index: 50;
+        }
+        .float-btn {
+            width: 48px; height: 48px; border-radius: 50%;
+            background: rgba(30,30,30,0.8); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #fff; font-size: 22px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3); transition: 0.2s;
+        }
+        .float-btn:active { transform: scale(0.9); background: var(--primary); }
+
+        /* 模态框 (换源) */
+        #modal-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+            z-index: 100; backdrop-filter: blur(8px);
+            align-items: center; justify-content: center;
+        }
+        .modal-box {
+            background: #1c1c1e; width: 900px; height: 85vh;
+            border-radius: 20px; border: 1px solid #333;
+            display: flex; flex-direction: column; overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .modal-header { 
+            padding: 20px 30px; border-bottom: 1px solid #333; background: #252527;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-title { font-size: 20px; font-weight: bold; color: #fff; }
+        .modal-close { cursor: pointer; font-size: 24px; color: #888; }
         
+        .modal-body { flex: 1; overflow-y: auto; padding: 30px; }
+        
+        .section-title { 
+            font-size: 14px; color: var(--primary); font-weight: bold; 
+            margin-bottom: 15px; margin-top: 10px; display: flex; align-items: center; gap: 8px;
+        }
+        .section-title::after { content: ""; flex: 1; height: 1px; background: #333; }
+        
+        .source-grid { 
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); 
+            gap: 15px; margin-bottom: 30px; 
+        }
+        
+        .source-card {
+            background: #2c2c2e; padding: 16px; border-radius: 12px;
+            cursor: pointer; border: 1px solid transparent;
+            display: flex; align-items: flex-start; gap: 12px; transition: 0.2s;
+        }
+        .source-card:hover { background: #3a3a3c; border-color: #555; transform: translateY(-2px); }
+        .source-card.active { border-color: var(--primary); background: rgba(0,122,255,0.1); }
+        
+        .s-icon { 
+            width: 40px; height: 40px; border-radius: 8px; 
+            background: linear-gradient(135deg, #333, #222); 
+            display: flex; align-items: center; justify-content: center; 
+            font-size: 20px; color: #fff; flex-shrink: 0;
+        }
+        .s-content h4 { margin: 0 0 4px 0; font-size: 15px; color: #eee; }
+        .s-content p { margin: 0; font-size: 12px; color: #888; line-height: 1.4; }
+        .tag { font-size: 10px; padding: 2px 6px; background: #000; border-radius: 4px; color: #aaa; margin-top: 6px; display: inline-block; }
+
         /* 手机端 */
-        #phone-ui { display: none; padding: 20px; background: #fff; height: 100vh; color: #000; }
-        
-        /* 扫码层 */
-        #qr-layer { position: absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:none; flex-direction:column; align-items:center; justify-content:center; z-index:50; }
-        #qrcode { background:#fff; padding:15px; border-radius:10px; }
-        
-        /* 移动端适配 */
-        @media (max-width: 768px) { #sidebar { width: 160px; } }
+        #phone-remote { display: none; height: 100vh; background: #f2f2f7; padding: 20px; color: #000; }
+
+        /* 响应式 */
+        @media (max-width: 1024px) {
+            #sidebar { width: 200px; }
+            #middle-panel { width: 240px; }
+        }
+        @media (max-width: 768px) {
+            #sidebar, #middle-panel { display: none; } 
+        }
     </style>
 </head>
 <body>
 
-    <div id="phone-ui">
-        <h3>📺 车载遥控器</h3>
-        <input type="text" id="urlInput" placeholder="粘贴视频链接" style="width:100%; padding:10px; margin:10px 0; border:1px solid #ccc;">
-        <button onclick="sendVideo()" style="width:100%; padding:12px; background:#e50914; color:#fff; border:none;">立即投屏</button>
-        <p id="phone-status" style="margin-top:10px; color:green;">连接中...</p>
+    <div id="phone-remote">
+        <h2>📲 LGCXS 车载遥控</h2>
+        <div style="background:#fff; padding:20px; border-radius:16px; box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+            <p style="font-size:13px; color:#888; margin-bottom:10px;">支持 M3U8 直播源或 MP4 链接</p>
+            <input type="text" id="urlInput" placeholder="在此长按粘贴链接..." style="width:100%; padding:16px; border:1px solid #e5e5ea; border-radius:10px; margin-bottom:15px; box-sizing:border-box; background:#f9f9f9;">
+            <button onclick="sendVideo()" style="width:100%; padding:16px; background:var(--primary); color:#fff; border:none; border-radius:10px; font-size:17px; font-weight:bold;">立即投屏</button>
+            <p id="phone-status" style="margin-top:20px; color:#34c759; text-align:center; font-weight:bold;">✅ 已连接到车辆</p>
+        </div>
     </div>
 
     <div id="sidebar">
-        <div id="group-tabs"></div>
-        <div id="channel-list"></div>
-        <div class="toolbar" onclick="toggleQr()">📲 手机投屏 / 换源</div>
+        <div class="brand-area">
+            <i class="ph-fill ph-car-profile"></i> LGCXS 2026
+        </div>
+        <div class="source-selector">
+            <button id="source-btn" onclick="toggleModal(true)">
+                <div style="display:flex; flex-direction:column; align-items:flex-start; overflow:hidden;">
+                    <span style="font-size:10px; color:#888; margin-bottom:2px;">当前信号源</span>
+                    <span id="current-source-label" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%;">未选择</span>
+                </div>
+                <i class="ph-bold ph-caret-down"></i>
+            </button>
+        </div>
+        <div id="group-list">
+            <div style="padding:20px; text-align:center; color:#444; font-size:12px;">正在初始化...</div>
+        </div>
     </div>
-    
-    <div id="main">
+
+    <div id="middle-panel">
+        <div class="search-area">
+            <div class="search-input-wrap">
+                <i class="ph ph-magnifying-glass search-icon"></i>
+                <input type="text" id="search-input" placeholder="搜央视/卫视/周星驰..." oninput="handleSearch()">
+            </div>
+        </div>
+        <div id="channel-list">
+            </div>
+    </div>
+
+    <div id="stage">
         <div id="player"></div>
-        <div id="qr-layer">
-            <div id="qrcode"></div>
-            <div style="margin-top:20px; color:#fff; font-size:14px;">微信扫码 粘贴链接</div>
-            <div style="margin-top:20px; padding:5px 20px; border:1px solid #fff; border-radius:20px; cursor:pointer; color:#fff;" onclick="toggleQr()">关闭</div>
+        
+        <div id="standby-screen">
+            <div id="qrcode-wrap"><div id="qrcode"></div></div>
+            <div class="standby-info">
+                <div class="standby-title">准备就绪</div>
+                <div class="capsule"><i class="ph-fill ph-qr-code"></i> 微信扫码投屏</div>
+                <div class="capsule"><i class="ph-fill ph-list-dashes"></i> 左侧选择频道</div>
+            </div>
+        </div>
+
+        <div class="float-bar">
+            <div class="float-btn" onclick="toggleStandby()" title="显隐二维码"><i class="ph-bold ph-qr-code"></i></div>
+            <div class="float-btn" onclick="toggleModal(true)" title="更换直播源" style="background:var(--primary);"><i class="ph-bold ph-swap"></i></div>
+        </div>
+    </div>
+
+    <div id="modal-overlay" onclick="handleModalClick(event)">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div class="modal-title">媒体资源库 (2026版)</div>
+                <div class="modal-close" onclick="toggleModal(false)"><i class="ph-bold ph-x"></i></div>
+            </div>
+            <div class="modal-body" id="source-grid">
+                </div>
         </div>
     </div>
 
     <script>
-        // 📢 配置区：如果你有其他源，改这里
-        const DEFAULT_SOURCE = 'https://live.fanmingming.com/tv/m3u/ipv6.m3u';
+        // ==========================================
+        // 📚 终极资源数据库 (分类清洗版)
+        // ==========================================
+        const CORS_PROXY = 'https://cors.isteed.cc/';
         
-        // MQTT 配置
+        const RESOURCE_DB = [
+            {
+                title: "🏆 精选聚合 (稳定推荐)",
+                sources: [
+                    { name: "IPTV 520精选", url: "https://gitee.com/bighello/iptv2024/raw/master/all520.m3u", desc: "综合性强，包含央视卫视", tag: "Gitee源" },
+                    { name: "BigBigGrandG 聚合", url: "https://raw.githubusercontent.com/BigBigGrandG/IPTV-URL/release/Gather.m3u", desc: "大杂烩，频道极多", tag: "Github" },
+                    { name: "AutoIPTV 酒店源", url: "https://mirror.ghproxy.com/https://raw.githubusercontent.com/cymz6/AutoIPTV-Hotel/main/lives.m3u", desc: "酒店源采集，速度快", tag: "稳定" }
+                ]
+            },
+            {
+                title: "📺 平台直播 & 轮播",
+                sources: [
+                    { name: "直播熊猫", url: "https://gitee.com/bighello/iptv2024/raw/master/panda.m3u", desc: "熊猫IPTV采集", tag: "Gitee" },
+                    { name: "虎牙一起看", url: "https://live.freetv.top/huyayqk.m3u", desc: "电影/电视剧/综艺24h", tag: "影视" },
+                    { name: "斗鱼一起看", url: "https://live.freetv.top/douyuyqk.m3u", desc: "经典老片轮播", tag: "影视" },
+                    { name: "BiliBili 直播", url: "https://www.goodiptv.club/bililive.m3u", desc: "B站UP主直播流", tag: "娱乐" },
+                    { name: "轮播: 华数/CIBN", url: "https://raw.githubusercontent.com/imDazui/Tvlist-awesome-m3u-m3u8/master/m3u/%E8%BD%AE%E6%92%AD_%E5%8D%8E%E6%95%B0.NewTV.SiTV.CIBN.m3u", desc: "数字电视轮播频道", tag: "NewTV" }
+                ]
+            },
+            {
+                title: "📡 传统电视 (国内)",
+                sources: [
+                    { name: "国内电视台 (2022)", url: "https://raw.githubusercontent.com/imDazui/Tvlist-awesome-m3u-m3u8/master/m3u/%E5%9B%BD%E5%86%85%E7%94%B5%E8%A7%86%E5%8F%B02022-11.m3u", desc: "央视/卫视/地方台备份", tag: "备份" },
+                    { name: "安徽农大校园网", url: "https://raw.githubusercontent.com/imDazui/Tvlist-awesome-m3u-m3u8/master/m3u/%E5%AE%89%E5%BE%BD%E5%86%9C%E5%A4%A72021.m3u", desc: "校园网IPV6采集", tag: "IPV6" }
+                ]
+            },
+            {
+                title: "🌏 全球 & 港澳台",
+                sources: [
+                    { name: "港澳台直连", url: "https://raw.githubusercontent.com/imDazui/Tvlist-awesome-m3u-m3u8/master/m3u/%E5%8F%B0%E6%B9%BE%E9%A6%99%E6%B8%AF%E6%BE%B3%E9%97%A82022-11.m3u", desc: "部分线路可能需特殊网络", tag: "区域" },
+                    { name: "国外电视台", url: "https://raw.githubusercontent.com/imDazui/Tvlist-awesome-m3u-m3u8/master/m3u/%E5%9B%BD%E5%A4%96%E7%94%B5%E8%A7%86%E5%8F%B02022-11.m3u", desc: "日韩欧美频道", tag: "国际" }
+                ]
+            },
+            {
+                title: "⚡ IPv6 专区",
+                sources: [
+                    { name: "精选 IPv6 源", url: "https://mirror.ghproxy.com/https://raw.githubusercontent.com/Ftindy/IPTV-URL/main/IPV6.m3u", desc: "速度极快，需车机支持IPv6", tag: "极速" }
+                ]
+            },
+            {
+                title: "📻 广播 & 景区",
+                sources: [
+                    { name: "全国广播电台", url: "https://raw.githubusercontent.com/imDazui/Tvlist-awesome-m3u-m3u8/master/m3u/%E5%B9%BF%E6%92%AD%E7%94%B5%E5%8F%B02021.m3u", desc: "800+ 广播电台", tag: "听书" },
+                    { name: "景区直播", url: "https://raw.githubusercontent.com/imDazui/Tvlist-awesome-m3u-m3u8/master/m3u/%E5%B9%BF%E6%92%AD%E7%94%B5%E5%8F%B02021.m3u", desc: "各地风景慢直播", tag: "风景" }
+                ]
+            }
+        ];
+
+        // ==========================================
+        // 🧠 核心引擎
+        // ==========================================
         const mqttBroker = 'wss://broker.emqx.io:8084/mqtt';
         const getUuid = () => Math.random().toString(36).substring(2, 9);
         const params = new URLSearchParams(window.location.search);
         const mode = params.get('mode');
         const channelId = params.get('id') || getUuid();
         const topic = `lgcxs/car/${channelId}`;
-        let client = null, player = null, allData = null;
 
-        if (mode === 'sender') initSender();
-        else initCar();
+        let client = null, player = null;
+        let allChannels = []; 
+        let currentGroup = "全部";
 
-        // === 核心逻辑：移植自 m3u-parser.js ===
-        // 这里我把原网站的解析逻辑简化并集成进来了
-        function parseM3U(rawText) {
-            const lines = rawText.replace(/\r\n?/g, '\n').split('\n');
-            const groups = {}; // 按分组存储
-            let currentInfo = null;
+        // 入口分流
+        if (mode === 'sender') {
+            initPhone();
+        } else {
+            initCar();
+        }
+
+        function initCar() {
+            // 生成二维码
+            const remoteUrl = `${window.location.origin}${window.location.pathname}?mode=sender&id=${channelId}`;
+            new QRCode(document.getElementById("qrcode"), { text: remoteUrl, width: 180, height: 180 });
+
+            // 渲染资源库
+            renderResourceLib();
+            
+            // 默认加载第一个源 (520个)
+            loadSource(RESOURCE_DB[0].sources[0]);
+
+            // MQTT连接
+            client = mqtt.connect(mqttBroker);
+            client.on('connect', () => client.subscribe(topic));
+            client.on('message', (t, msg) => play(msg.toString()));
+        }
+
+        // 渲染资源库模态框
+        function renderResourceLib() {
+            const grid = document.getElementById('source-grid');
+            grid.innerHTML = '';
+            
+            RESOURCE_DB.forEach(section => {
+                const title = document.createElement('div');
+                title.className = 'section-title';
+                title.innerHTML = `<i class="ph-fill ph-circles-four"></i> ${section.title}`;
+                grid.appendChild(title);
+
+                const container = document.createElement('div');
+                container.className = 'source-grid';
+                
+                section.sources.forEach(src => {
+                    const card = document.createElement('div');
+                    card.className = 'source-card';
+                    // 根据标签不同显示不同图标
+                    let iconClass = "ph-television";
+                    if(src.tag.includes("影视")) iconClass = "ph-film-strip";
+                    if(src.tag.includes("听书")) iconClass = "ph-radio";
+                    
+                    card.innerHTML = `
+                        <div class="s-icon"><i class="ph-fill ${iconClass}"></i></div>
+                        <div class="s-content">
+                            <h4>${src.name}</h4>
+                            <p>${src.desc}</p>
+                            <span class="tag">${src.tag}</span>
+                        </div>
+                    `;
+                    card.onclick = () => loadSource(src);
+                    container.appendChild(card);
+                });
+                grid.appendChild(container);
+            });
+        }
+
+        // 加载源 (智能代理 + M3U解析)
+        async function loadSource(source) {
+            toggleModal(false);
+            document.getElementById('current-source-label').innerText = source.name;
+            document.getElementById('group-list').innerHTML = '<div style="padding:30px;text-align:center;color:#666"><i class="ph ph-spinner ph-spin" style="font-size:24px;"></i><br>正在加载资源...</div>';
+            document.getElementById('channel-list').innerHTML = '';
+
+            try {
+                let url = source.url;
+                // 智能代理逻辑：如果是Github/Gitee raw链接，走代理
+                if (url.includes('githubusercontent') || url.includes('gitee.com')) {
+                    // 如果链接里已经包含了代理(ghproxy)，就不加了，否则加 CORS_PROXY
+                    if (!url.includes('ghproxy')) {
+                        url = CORS_PROXY + url;
+                    }
+                }
+
+                const res = await fetch(url);
+                const text = await res.text();
+                
+                parseM3u(text);
+                renderGroups();
+                
+            } catch (e) {
+                console.error(e);
+                document.getElementById('group-list').innerHTML = `<div style="padding:20px;text-align:center;color:#ff453a"><i class="ph-fill ph-warning-circle"></i><br>加载失败<br><span style="font-size:10px">请检查网络或源地址</span></div>`;
+            }
+        }
+
+        // 解析 M3U
+        function parseM3u(content) {
+            allChannels = [];
+            const lines = content.split('\n');
+            let info = null;
 
             lines.forEach(line => {
                 line = line.trim();
                 if (!line) return;
-                
                 if (line.startsWith('#EXTINF')) {
-                    // 解析属性
                     const groupMatch = line.match(/group-title="([^"]*)"/);
                     const logoMatch = line.match(/tvg-logo="([^"]*)"/);
                     const nameParts = line.split(',');
-                    const name = nameParts[nameParts.length - 1].trim();
-                    const group = groupMatch ? groupMatch[1] : '其他频道';
+                    const name = nameParts[nameParts.length-1].trim();
+                    const group = groupMatch ? groupMatch[1] : '其他';
                     const logo = logoMatch ? logoMatch[1] : '';
-
-                    // 过滤逻辑：跳过“更新时间”等无效频道
-                    if (group.includes('更新时间') || name.includes('列表更新')) {
-                        currentInfo = null;
-                        return;
-                    }
-
-                    currentInfo = { name, group, logo };
-                } else if (!line.startsWith('#') && currentInfo) {
-                    const url = line;
-                    if (!groups[currentInfo.group]) groups[currentInfo.group] = [];
-                    
-                    groups[currentInfo.group].push({
-                        name: currentInfo.name,
-                        url: url,
-                        logo: currentInfo.logo
-                    });
-                    currentInfo = null;
+                    info = { name, group, logo };
+                } else if (!line.startsWith('#') && info) {
+                    allChannels.push({ ...info, url: line });
+                    info = null;
                 }
             });
-            return groups;
         }
 
-        // === 车机端逻辑 ===
-        async function initCar() {
-            // 生成二维码
-            const remoteUrl = `${window.location.origin}${window.location.pathname}?mode=sender&id=${channelId}`;
-            new QRCode(document.getElementById("qrcode"), { text: remoteUrl, width: 200, height: 200 });
+        // 渲染分组
+        function renderGroups() {
+            const groups = {};
+            allChannels.forEach(ch => { groups[ch.group] = (groups[ch.group] || 0) + 1; });
+            const list = document.getElementById('group-list');
+            list.innerHTML = `<div class="group-label">所有频道 (${allChannels.length})</div>`;
 
-            // 监听 MQTT
-            client = mqtt.connect(mqttBroker);
-            client.on('connect', () => client.subscribe(topic));
-            client.on('message', (t, msg) => {
-                const url = msg.toString();
-                if(url.endsWith('.m3u') || url.endsWith('.m3u8')) {
-                    // 如果投送的是列表，重新加载列表
-                    loadSource(url);
-                } else {
-                    // 如果是单视频，直接播放
-                    play(url);
-                    toggleQr(false);
-                }
+            // 全部
+            renderGroupBtn("全部", allChannels.length, list);
+
+            // 热门分组置顶逻辑 (可选)
+            Object.keys(groups).sort().forEach(g => {
+                renderGroupBtn(g, groups[g], list);
+            });
+            
+            selectGroup("全部");
+        }
+
+        function renderGroupBtn(name, count, parent) {
+            const div = document.createElement('div');
+            div.className = 'group-item';
+            div.innerHTML = `<span>${name}</span><span class="badge">${count}</span>`;
+            div.onclick = (e) => {
+                document.querySelectorAll('.group-item').forEach(i => i.classList.remove('active'));
+                e.currentTarget.classList.add('active');
+                selectGroup(name);
+            };
+            if(name === '全部') div.classList.add('active');
+            parent.appendChild(div);
+        }
+
+        function selectGroup(groupName) {
+            currentGroup = groupName;
+            const filtered = groupName === '全部' ? allChannels : allChannels.filter(ch => ch.group === groupName);
+            renderChannels(filtered);
+            document.getElementById('search-input').value = ''; // 清空搜索
+        }
+
+        // 渲染频道列表 (带懒加载优化)
+        function renderChannels(channels) {
+            const container = document.getElementById('channel-list');
+            container.innerHTML = '';
+            
+            // 限制渲染数量防止卡顿 (前150个)
+            const limit = 150;
+            const list = channels.slice(0, limit);
+
+            if(list.length === 0) {
+                container.innerHTML = '<div style="padding:20px;text-align:center;color:#666">暂无频道</div>';
+                return;
+            }
+
+            list.forEach(ch => {
+                const card = document.createElement('div');
+                card.className = 'channel-card';
+                // 默认图标
+                const logo = ch.logo || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMzMzIiBzdHJva2Utd2lkdGg9IjIiPjxyZWN0IHg9IjIiIHk9IjYiIHdpZHRoPSIyMCIgaGVpZ2h0PSIxMiIgcng9IjIiIHJ5PSIyIj48L3JlY3Q+PC9zdmc+';
+                
+                card.innerHTML = `
+                    <img class="ch-logo" src="${logo}" onerror="this.src='${logo}'">
+                    <div class="ch-info">
+                        <div class="ch-name">${ch.name}</div>
+                        <div class="ch-epg">${ch.group}</div>
+                    </div>
+                `;
+                card.onclick = () => {
+                    document.querySelectorAll('.channel-card').forEach(c => c.classList.remove('active'));
+                    card.classList.add('active');
+                    play(ch.url);
+                };
+                container.appendChild(card);
             });
 
-            // 加载默认源
-            loadSource(DEFAULT_SOURCE);
-        }
-
-        async function loadSource(url) {
-            try {
-                document.getElementById('channel-list').innerHTML = '<div style="padding:10px; color:#999;">正在解析列表...</div>';
-                const res = await fetch(url);
-                const text = await res.text();
-                allData = parseM3U(text);
-                renderGroups();
-            } catch (e) {
-                alert('源加载失败，请检查网络');
+            if (channels.length > limit) {
+                const more = document.createElement('div');
+                more.style.padding = '15px'; more.style.textAlign = 'center'; more.style.fontSize='12px'; more.style.color='#666';
+                more.innerHTML = `仅显示前 ${limit} 个，请使用上方搜索查找更多`;
+                container.appendChild(more);
             }
         }
 
-        function renderGroups() {
-            const tabs = document.getElementById('group-tabs');
-            tabs.innerHTML = '';
-            const groupNames = Object.keys(allData);
-            
-            if(groupNames.length === 0) return;
-
-            groupNames.forEach((g, index) => {
-                const btn = document.createElement('div');
-                btn.className = `group-tab ${index === 0 ? 'active' : ''}`;
-                btn.innerText = g;
-                btn.onclick = () => {
-                    document.querySelectorAll('.group-tab').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    renderChannels(g);
-                };
-                tabs.appendChild(btn);
-            });
-
-            // 默认显示第一组
-            renderChannels(groupNames[0]);
+        // 搜索功能
+        function handleSearch() {
+            const val = document.getElementById('search-input').value.toLowerCase();
+            if(!val) {
+                selectGroup(currentGroup);
+                return;
+            }
+            const res = allChannels.filter(ch => ch.name.toLowerCase().includes(val));
+            renderChannels(res);
         }
 
-        function renderChannels(groupName) {
-            const list = document.getElementById('channel-list');
-            list.innerHTML = '';
-            
-            allData[groupName].forEach(ch => {
-                const div = document.createElement('div');
-                div.className = 'channel-item';
-                div.innerHTML = `
-                    <img class="channel-logo" src="${ch.logo}" onerror="this.style.display='none'">
-                    <span class="channel-name">${ch.name}</span>
-                `;
-                div.onclick = () => {
-                    document.querySelectorAll('.channel-item').forEach(i => i.classList.remove('active'));
-                    div.classList.add('active');
-                    play(ch.url);
-                };
-                list.appendChild(div);
-            });
-        }
-
+        // 播放控制
         function play(url) {
+            document.getElementById('standby-screen').style.display = 'none';
             if (!player) {
                 player = new Player({
-                    id: 'player',
-                    url: url,
-                    playsinline: true,
-                    autoplay: true,
-                    fluid: true,
-                    plugins: [window.HlsJsPlugin],
-                    cssFullscreen: true // 网页全屏防屏蔽
+                    id: 'player', url, playsinline: true, autoplay: true, fluid: true,
+                    plugins: [window.HlsJsPlugin], cssFullscreen: true, width:'100%', height:'100%'
                 });
                 player.once('play', () => player.getCssFullscreen());
             } else {
-                player.src = url;
-                player.reload(); // 切台重载
-                player.play();
+                player.src = url; player.reload(); player.play();
             }
         }
 
-        function toggleQr(show) {
-            const el = document.getElementById('qr-layer');
-            el.style.display = (show === undefined ? (el.style.display === 'flex' ? 'none' : 'flex') : (show ? 'flex' : 'none'));
+        // UI 辅助
+        function toggleStandby() {
+            const el = document.getElementById('standby-screen');
+            el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+        }
+        function toggleModal(show) {
+            document.getElementById('modal-overlay').style.display = show ? 'flex' : 'none';
+        }
+        function handleModalClick(e) {
+            if (e.target.id === 'modal-overlay') toggleModal(false);
         }
 
-        // === 手机端逻辑 ===
-        function initSender() {
-            document.body.style.display = 'block';
+        // 手机端
+        function initPhone() {
+            document.getElementById('phone-remote').style.display = 'block';
             document.getElementById('sidebar').style.display = 'none';
-            document.getElementById('main').style.display = 'none';
-            document.getElementById('phone-ui').style.display = 'block';
+            document.getElementById('middle-panel').style.display = 'none';
+            document.getElementById('stage').style.display = 'none';
             
             client = mqtt.connect(mqttBroker);
-            client.on('connect', () => document.getElementById('phone-status').innerText = '✅ 已连接到车机');
+            client.on('connect', () => document.getElementById('phone-status').innerText = '✅ 已连接到车辆');
             
             window.sendVideo = () => {
                 const url = document.getElementById('urlInput').value.trim();
-                if(url && client) {
-                    client.publish(topic, url);
-                    alert('已发送');
-                }
+                if(url) { client.publish(topic, url); alert('指令已发送'); }
             }
         }
     </script>
