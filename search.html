@@ -72,9 +72,9 @@
         // 播放页地址（对应index.html）
         const PLAY_PAGE = "index.html";
 
-        // 跨域代理：解决Vercel前端调用API的跨域问题
+        // 🔥 核心修改1：替换为可用的跨域代理（解决Failed to fetch）
         function getProxyUrl(url) {
-            return `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+            return `https://cors-anywhere.herokuapp.com/${url}`;
         }
 
         // 核心：搜索视频（适配特斯拉车机网络）
@@ -106,9 +106,8 @@
                     timeout: 10000 // 超时10秒，适配车机网络
                 });
 
-                const result = await response.json();
-                // 解析API返回的视频数据
-                const apiData = JSON.parse(result.contents);
+                // 🔥 核心修改2：直接解析API返回数据（无需再解析contents）
+                const apiData = await response.json();
                 const videoList = apiData.list || apiData.data || apiData.vod_list || [];
 
                 // 无结果处理
@@ -123,8 +122,9 @@
                 renderResult(videoList);
             } catch (e) {
                 document.getElementById('loading').style.display = 'none';
-                document.getElementById('error').innerText = `搜索失败：${e.message}\n建议切换解析源`;
+                document.getElementById('error').innerText = `搜索失败：${e.message}\n建议切换解析源或稍后重试`;
                 document.getElementById('error').style.display = 'block';
+                console.log("调试信息：", e); // 方便排查问题
             }
         }
 
