@@ -3,150 +3,249 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LGCXS 车载投屏</title>
+    <title>车载电视 Ultimate</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="//unpkg.com/xgplayer@2.31.6/browser/index.js"></script>
     <script src="//unpkg.com/xgplayer-hls.js/dist/index.min.js"></script>
-
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; height: 100vh; display: flex; }
         
-        /* 界面通用 */
-        .container { text-align: center; width: 90%; max-width: 400px; }
-        h2 { margin-bottom: 10px; font-weight: normal; }
-        .status { font-size: 12px; color: #aaa; margin-top: 10px; }
+        /* 侧边栏：分组+频道 */
+        #sidebar { width: 220px; height: 100%; background: #1a1a1a; display: flex; flex-direction: column; border-right: 1px solid #333; z-index: 20; }
         
-        /* 车机端：二维码 */
-        #car-ui { display: none; }
-        #qrcode { background: #fff; padding: 10px; border-radius: 8px; display: inline-block; }
+        /* 分组标签栏 */
+        #group-tabs { display: flex; overflow-x: auto; background: #222; padding: 5px; border-bottom: 1px solid #333; height: 40px; align-items: center; }
+        .group-tab { padding: 5px 10px; margin-right: 5px; font-size: 12px; white-space: nowrap; cursor: pointer; color: #888; border-radius: 4px; }
+        .group-tab.active { background: #e50914; color: #fff; }
         
-        /* 手机端：遥控器 */
-        #phone-ui { display: none; background: #222; padding: 20px; border-radius: 12px; }
-        input { width: 100%; padding: 12px; margin: 15px 0; border: none; border-radius: 6px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: #07c160; color: #fff; border: none; border-radius: 6px; font-size: 16px; }
+        /* 频道列表 */
+        #channel-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .channel-item { padding: 10px; margin-bottom: 5px; background: #2a2a2a; border-radius: 4px; cursor: pointer; display: flex; align-items: center; transition: all 0.2s; }
+        .channel-item:hover, .channel-item.active { background: #e50914; transform: translateX(5px); }
+        .channel-logo { width: 30px; height: 30px; margin-right: 10px; object-fit: contain; border-radius: 4px; background: rgba(255,255,255,0.1); }
+        .channel-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* 底部工具 */
+        .toolbar { padding: 10px; background: #111; text-align: center; font-size: 12px; color: #666; cursor: pointer; border-top: 1px solid #333; }
+
+        /* 播放区 */
+        #main { flex: 1; position: relative; }
+        #player { width: 100%; height: 100%; }
         
-        /* 播放器 (默认隐藏，接收到信号后全屏) */
-        #player { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 999; display: none; background: #000; }
+        /* 手机端 */
+        #phone-ui { display: none; padding: 20px; background: #fff; height: 100vh; color: #000; }
         
-        /* 强制网页全屏 (绕过车机限制) */
-        .xgplayer-is-cssfullscreen {
-            position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 9999 !important;
-        }
+        /* 扫码层 */
+        #qr-layer { position: absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:none; flex-direction:column; align-items:center; justify-content:center; z-index:50; }
+        #qrcode { background:#fff; padding:15px; border-radius:10px; }
+        
+        /* 移动端适配 */
+        @media (max-width: 768px) { #sidebar { width: 160px; } }
     </style>
 </head>
 <body>
 
-    <div id="player"></div>
-
-    <div id="car-ui" class="container">
-        <div id="qrcode"></div>
-        <h2>手机扫码投送</h2>
-        <div class="status" id="car-status">正在连接公共信号塔...</div>
+    <div id="phone-ui">
+        <h3>📺 车载遥控器</h3>
+        <input type="text" id="urlInput" placeholder="粘贴视频链接" style="width:100%; padding:10px; margin:10px 0; border:1px solid #ccc;">
+        <button onclick="sendVideo()" style="width:100%; padding:12px; background:#e50914; color:#fff; border:none;">立即投屏</button>
+        <p id="phone-status" style="margin-top:10px; color:green;">连接中...</p>
     </div>
 
-    <div id="phone-ui" class="container">
-        <h2>粘贴视频链接</h2>
-        <input type="text" id="urlInput" placeholder="在此粘贴 m3u8 或 mp4 链接">
-        <button onclick="sendVideo()">立即投屏</button>
-        <div class="status" id="phone-status">准备就绪</div>
+    <div id="sidebar">
+        <div id="group-tabs"></div>
+        <div id="channel-list"></div>
+        <div class="toolbar" onclick="toggleQr()">📲 手机投屏 / 换源</div>
+    </div>
+    
+    <div id="main">
+        <div id="player"></div>
+        <div id="qr-layer">
+            <div id="qrcode"></div>
+            <div style="margin-top:20px; color:#fff; font-size:14px;">微信扫码 粘贴链接</div>
+            <div style="margin-top:20px; padding:5px 20px; border:1px solid #fff; border-radius:20px; cursor:pointer; color:#fff;" onclick="toggleQr()">关闭</div>
+        </div>
     </div>
 
     <script>
-        // === 配置：使用免费的公共 MQTT Broker ===
-        // 这里使用的是 EMQX 的免费公共服务器，支持 WebSocket SSL
+        // 📢 配置区：如果你有其他源，改这里
+        const DEFAULT_SOURCE = 'https://live.fanmingming.com/tv/m3u/ipv6.m3u';
+        
+        // MQTT 配置
         const mqttBroker = 'wss://broker.emqx.io:8084/mqtt';
-        
-        // 生成一个随机的通信频道 ID，防止跟别人串台
         const getUuid = () => Math.random().toString(36).substring(2, 9);
-        
-        // 核心逻辑
         const params = new URLSearchParams(window.location.search);
-        const mode = params.get('mode'); // 'sender' 是手机, null 是车机
-        const channelId = params.get('id') || getUuid(); // 通信频道ID
-        const topic = `lgcxs/car/${channelId}`; // MQTT 订阅的主题
+        const mode = params.get('mode');
+        const channelId = params.get('id') || getUuid();
+        const topic = `lgcxs/car/${channelId}`;
+        let client = null, player = null, allData = null;
 
-        let client = null;
+        if (mode === 'sender') initSender();
+        else initCar();
 
-        if (mode === 'sender') {
-            initPhone();
-        } else {
-            initCar();
+        // === 核心逻辑：移植自 m3u-parser.js ===
+        // 这里我把原网站的解析逻辑简化并集成进来了
+        function parseM3U(rawText) {
+            const lines = rawText.replace(/\r\n?/g, '\n').split('\n');
+            const groups = {}; // 按分组存储
+            let currentInfo = null;
+
+            lines.forEach(line => {
+                line = line.trim();
+                if (!line) return;
+                
+                if (line.startsWith('#EXTINF')) {
+                    // 解析属性
+                    const groupMatch = line.match(/group-title="([^"]*)"/);
+                    const logoMatch = line.match(/tvg-logo="([^"]*)"/);
+                    const nameParts = line.split(',');
+                    const name = nameParts[nameParts.length - 1].trim();
+                    const group = groupMatch ? groupMatch[1] : '其他频道';
+                    const logo = logoMatch ? logoMatch[1] : '';
+
+                    // 过滤逻辑：跳过“更新时间”等无效频道
+                    if (group.includes('更新时间') || name.includes('列表更新')) {
+                        currentInfo = null;
+                        return;
+                    }
+
+                    currentInfo = { name, group, logo };
+                } else if (!line.startsWith('#') && currentInfo) {
+                    const url = line;
+                    if (!groups[currentInfo.group]) groups[currentInfo.group] = [];
+                    
+                    groups[currentInfo.group].push({
+                        name: currentInfo.name,
+                        url: url,
+                        logo: currentInfo.logo
+                    });
+                    currentInfo = null;
+                }
+            });
+            return groups;
         }
 
-        // =======================
-        // 🚗 车机端逻辑
-        // =======================
-        function initCar() {
-            document.getElementById('car-ui').style.display = 'block';
-            
-            // 1. 生成二维码 (指向手机遥控页面)
+        // === 车机端逻辑 ===
+        async function initCar() {
+            // 生成二维码
             const remoteUrl = `${window.location.origin}${window.location.pathname}?mode=sender&id=${channelId}`;
             new QRCode(document.getElementById("qrcode"), { text: remoteUrl, width: 200, height: 200 });
 
-            // 2. 连接 MQTT
+            // 监听 MQTT
             client = mqtt.connect(mqttBroker);
-            
-            client.on('connect', () => {
-                document.getElementById('car-status').innerText = '✅ 信号已连接，等待扫码...';
-                client.subscribe(topic); // 监听这个频道
+            client.on('connect', () => client.subscribe(topic));
+            client.on('message', (t, msg) => {
+                const url = msg.toString();
+                if(url.endsWith('.m3u') || url.endsWith('.m3u8')) {
+                    // 如果投送的是列表，重新加载列表
+                    loadSource(url);
+                } else {
+                    // 如果是单视频，直接播放
+                    play(url);
+                    toggleQr(false);
+                }
             });
 
-            // 3. 收到消息 -> 播放
-            client.on('message', (topic, message) => {
-                const videoUrl = message.toString();
-                console.log('收到视频:', videoUrl);
-                startPlayer(videoUrl);
+            // 加载默认源
+            loadSource(DEFAULT_SOURCE);
+        }
+
+        async function loadSource(url) {
+            try {
+                document.getElementById('channel-list').innerHTML = '<div style="padding:10px; color:#999;">正在解析列表...</div>';
+                const res = await fetch(url);
+                const text = await res.text();
+                allData = parseM3U(text);
+                renderGroups();
+            } catch (e) {
+                alert('源加载失败，请检查网络');
+            }
+        }
+
+        function renderGroups() {
+            const tabs = document.getElementById('group-tabs');
+            tabs.innerHTML = '';
+            const groupNames = Object.keys(allData);
+            
+            if(groupNames.length === 0) return;
+
+            groupNames.forEach((g, index) => {
+                const btn = document.createElement('div');
+                btn.className = `group-tab ${index === 0 ? 'active' : ''}`;
+                btn.innerText = g;
+                btn.onclick = () => {
+                    document.querySelectorAll('.group-tab').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    renderChannels(g);
+                };
+                tabs.appendChild(btn);
+            });
+
+            // 默认显示第一组
+            renderChannels(groupNames[0]);
+        }
+
+        function renderChannels(groupName) {
+            const list = document.getElementById('channel-list');
+            list.innerHTML = '';
+            
+            allData[groupName].forEach(ch => {
+                const div = document.createElement('div');
+                div.className = 'channel-item';
+                div.innerHTML = `
+                    <img class="channel-logo" src="${ch.logo}" onerror="this.style.display='none'">
+                    <span class="channel-name">${ch.name}</span>
+                `;
+                div.onclick = () => {
+                    document.querySelectorAll('.channel-item').forEach(i => i.classList.remove('active'));
+                    div.classList.add('active');
+                    play(ch.url);
+                };
+                list.appendChild(div);
             });
         }
 
-        // 启动播放器
-        function startPlayer(url) {
-            document.getElementById('car-ui').style.display = 'none';
-            document.getElementById('player').style.display = 'block';
-            
-            // 如果已有播放器则销毁重建 (避免旧流缓存)
-            document.getElementById('player').innerHTML = '';
-            
-            const player = new Player({
-                id: 'player',
-                url: url,
-                playsinline: true,      // 关键：车机防屏蔽
-                autoplay: true,
-                fluid: true,
-                plugins: [window.HlsJsPlugin], // 支持 m3u8
-                cssFullscreen: true     // 网页样式全屏
-            });
-            
-            player.once('play', () => {
-                // 尝试自动进入网页全屏
-                player.getCssFullscreen();
-            });
+        function play(url) {
+            if (!player) {
+                player = new Player({
+                    id: 'player',
+                    url: url,
+                    playsinline: true,
+                    autoplay: true,
+                    fluid: true,
+                    plugins: [window.HlsJsPlugin],
+                    cssFullscreen: true // 网页全屏防屏蔽
+                });
+                player.once('play', () => player.getCssFullscreen());
+            } else {
+                player.src = url;
+                player.reload(); // 切台重载
+                player.play();
+            }
         }
 
-        // =======================
-        // 📱 手机端逻辑
-        // =======================
-        function initPhone() {
+        function toggleQr(show) {
+            const el = document.getElementById('qr-layer');
+            el.style.display = (show === undefined ? (el.style.display === 'flex' ? 'none' : 'flex') : (show ? 'flex' : 'none'));
+        }
+
+        // === 手机端逻辑 ===
+        function initSender() {
+            document.body.style.display = 'block';
+            document.getElementById('sidebar').style.display = 'none';
+            document.getElementById('main').style.display = 'none';
             document.getElementById('phone-ui').style.display = 'block';
             
             client = mqtt.connect(mqttBroker);
+            client.on('connect', () => document.getElementById('phone-status').innerText = '✅ 已连接到车机');
             
-            client.on('connect', () => {
-                document.getElementById('phone-status').innerText = '✅ 已连接到车机';
-            });
-        }
-
-        window.sendVideo = function() {
-            const url = document.getElementById('urlInput').value.trim();
-            if(!url) return alert('请粘贴链接');
-            
-            if(client && client.connected) {
-                // 发送消息到那个频道
-                client.publish(topic, url);
-                alert('已发送指令！');
-            } else {
-                alert('连接中，请稍后...');
+            window.sendVideo = () => {
+                const url = document.getElementById('urlInput').value.trim();
+                if(url && client) {
+                    client.publish(topic, url);
+                    alert('已发送');
+                }
             }
         }
     </script>
