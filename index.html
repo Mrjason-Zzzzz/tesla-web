@@ -5,141 +5,257 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>特斯拉副驾观影</title>
+    <title>特斯拉金鹰观影</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dplayer@latest/dist/DPlayer.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background-color: #000; height: 100vh; overflow: hidden; font-family: sans-serif; }
-        #dplayer { width: 100vw; height: 100vh; }
-        /* 特斯拉触控优化：放大控制按钮 */
-        .dplayer-icon { transform: scale(1.2); margin: 0 8px; cursor: pointer; }
-        .dplayer-bar { height: 8px !important; }
-        .dplayer-thumb { width: 20px !important; height: 20px !important; }
-        /* 核心：隐藏video标签的原生特征，规避特斯拉检测 */
-        video { 
-            -webkit-touch-callout: none; 
-            pointer-events: auto !important; 
-            user-select: none;
-            playsinline: true;
-            webkit-playsinline: true;
+        body { background: #000; color: #fff; font-family: sans-serif; padding: 20px; }
+        .title { font-size: 22px; margin-bottom: 20px; text-align: center; }
+        /* 分类标签 */
+        .category-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 10px; }
+        .category-tab { padding: 8px 15px; background: #111; border: 1px solid #333; border-radius: 20px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+        .category-tab.active { background: #0071e3; border-color: #0071e3; }
+        /* 视频列表 */
+        .video-list { margin-bottom: 30px; }
+        .video-item { 
+            background: #111; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin-bottom: 10px; 
+            cursor: pointer; 
+            touch-action: manipulation;
         }
-        .loading-tips { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 18px; z-index: 9999; }
-        .error-tips { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: #ff4444; padding: 20px; border-radius: 8px; font-size: 16px; z-index: 9999; max-width: 80%; text-align: center; }
+        .video-title { font-size: 18px; margin-bottom: 5px; }
+        .video-info { font-size: 14px; color: #999; display: flex; justify-content: space-between; }
+        /* 播放器区域 */
+        #dplayer { width: 100vw; height: 100vh; display: none; position: fixed; top: 0; left: 0; z-index: 999; background: #000; }
+        .loading-tips { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 18px; z-index: 9999; display: none; }
+        .back-btn { 
+            position: fixed; 
+            top: 20px; 
+            left: 20px; 
+            z-index: 1000; 
+            background: rgba(0,0,0,0.8); 
+            color: #fff; 
+            border: none; 
+            padding: 10px 15px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            display: none;
+        }
+        .error-tips { text-align: center; color: #ff4444; font-size: 16px; margin-top: 20px; display: none; }
     </style>
 </head>
 <body>
-    <div class="loading-tips" id="loadingTips">正在初始化播放器...</div>
+    <h1 class="title">特斯拉金鹰观影</h1>
+    <!-- 分类标签 -->
+    <div class="category-tabs" id="categoryTabs">
+        <div class="category-tab active" data-type="all">全部</div>
+        <div class="category-tab" data-type="篮球">篮球</div>
+        <div class="category-tab" data-type="足球">足球</div>
+        <div class="category-tab" data-type="短剧">短剧</div>
+        <div class="category-tab" data-type="日本动漫">日本动漫</div>
+        <div class="category-tab" data-type="剧情片">剧情片</div>
+        <div class="category-tab" data-type="综艺">综艺</div>
+        <div class="category-tab" data-type="日剧">日剧</div>
+    </div>
+    <!-- 视频列表 -->
+    <div class="loading-tips" id="listLoading">正在加载视频列表...</div>
+    <div class="error-tips" id="listError">加载失败，点击重试</div>
+    <div class="video-list" id="videoList"></div>
+
+    <!-- 播放器区域 -->
+    <button class="back-btn" id="backBtn" onclick="backToList()">返回列表</button>
+    <div class="loading-tips" id="playLoading">正在解析播放...</div>
     <div id="dplayer"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/dplayer@latest/dist/DPlayer.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
 
     <script>
-        // 隐藏加载提示
-        function hideLoadingTips() { document.getElementById('loadingTips').style.display = 'none'; }
+        // 🔥 金鹰资源接口配置（按你的要求，支持去掉s）
+        const CONFIG = {
+            // 优先用JSON采集接口（解析更简单），采集失败自动切换HTTP
+            collectApi: "https://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json",
+            // M3U8解析接口
+            parseApi: "https://hd.iapijy.com/play?url=",
+            // 备用采集接口（去掉s）
+            backupCollectApi: "http://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json"
+        };
 
-        // 显示错误提示
-        function showErrorTips(msg) {
-            hideLoadingTips();
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'error-tips';
-            errorDiv.innerHTML = msg;
-            document.body.appendChild(errorDiv);
-        }
+        let dp = null; // 播放器实例
+        let allVideos = []; // 所有视频数据
 
-        // 从URL获取M3U8视频源
-        function getVideoUrl() {
-            const urlParams = window.location.href.split("url=");
-            if (urlParams.length < 2) return null;
-            const videoUrl = decodeURIComponent(urlParams[1]);
-            if (!videoUrl.includes('.m3u8')) return null;
-            return videoUrl;
-        }
-
-        // 核心：绕过特斯拉挂D挡的视频暂停限制
+        // 绕过特斯拉D挡限制（核心逻辑）
         function bypassTeslaDRestriction() {
-            // 1. 捕获阶段拦截pause事件（优先级高于特斯拉监听）
             document.addEventListener('pause', function(e) {
-                // 仅针对特斯拉车机的video标签
                 if (e.target.tagName === 'VIDEO' && window.navigator.userAgent.includes('Tesla')) {
-                    e.preventDefault(); // 阻止特斯拉的pause指令生效
-                    e.target.play();    // 强制恢复播放，抵消D挡限制
-                }
-            }, true);
-
-            // 2. 禁用特斯拉对video的自动暂停策略
-            document.addEventListener('webkitvisibilitychange', function(e) {
-                if (document.webkitHidden && e.target.tagName === 'VIDEO') {
                     e.preventDefault();
+                    e.target.play();
                 }
             }, true);
-
-            // 3. 强制内联播放，规避全屏检测
             const video = document.createElement('video');
             video.setAttribute('playsinline', 'true');
             video.setAttribute('webkit-playsinline', 'true');
-            video.setAttribute('x5-playsinline', 'true');
         }
 
-        // 初始化播放器
-        function initPlayer() {
-            // 先执行D挡限制绕过逻辑
-            bypassTeslaDRestriction();
+        // 采集视频列表
+        async function collectVideos() {
+            document.getElementById('listLoading').style.display = 'block';
+            document.getElementById('videoList').style.display = 'none';
+            document.getElementById('listError').style.display = 'none';
 
-            // 获取视频源
-            const videoUrl = getVideoUrl();
-            if (!videoUrl) {
-                showErrorTips('未检测到有效视频源！<br>请从搜索页选择视频，或拼接URL：?url=你的M3U8地址');
+            try {
+                // 先调用HTTPS采集接口
+                let response = await fetch(CONFIG.collectApi, { timeout: 10000 });
+                if (!response.ok) throw new Error('HTTPS采集失败，切换HTTP');
+                
+                let data = await response.json();
+                if (!data.list || data.list.length === 0) throw new Error('无数据，切换备用接口');
+
+                allVideos = data.list;
+                renderVideoList('all'); // 默认显示全部
+            } catch (e) {
+                // 切换备用接口（去掉s）
+                try {
+                    const backupResponse = await fetch(CONFIG.backupCollectApi, { timeout: 10000 });
+                    const backupData = await backupResponse.json();
+                    if (!backupData.list || backupData.list.length === 0) throw new Error('备用接口无数据');
+
+                    allVideos = backupData.list;
+                    renderVideoList('all');
+                } catch (backupErr) {
+                    document.getElementById('listLoading').style.display = 'none';
+                    document.getElementById('listError').style.display = 'block';
+                    console.log('采集报错：', backupErr);
+                }
+            }
+        }
+
+        // 渲染视频列表（支持分类）
+        function renderVideoList(type) {
+            document.getElementById('listLoading').style.display = 'none';
+            const list = document.getElementById('videoList');
+            list.innerHTML = "";
+
+            // 过滤分类视频
+            const filteredVideos = type === 'all' 
+                ? allVideos 
+                : allVideos.filter(video => video.type_name === type);
+
+            if (filteredVideos.length === 0) {
+                list.innerHTML = '<div style="text-align:center; color:#999; margin-top:20px;">该分类暂无视频</div>';
+                list.style.display = 'block';
                 return;
             }
 
+            filteredVideos.forEach(video => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'video-item';
+                // 点击解析并播放
+                itemDiv.onclick = () => playVideo(video.vod_id, video.vod_name);
+
+                const title = document.createElement('div');
+                title.className = 'video-title';
+                title.innerText = video.vod_name;
+
+                const info = document.createElement('div');
+                info.className = 'video-info';
+                info.innerText = `${video.type_name} | ${video.vod_remarks || '正片'}`;
+
+                itemDiv.appendChild(title);
+                itemDiv.appendChild(info);
+                list.appendChild(itemDiv);
+            });
+
+            list.style.display = 'block';
+        }
+
+        // 解析并播放视频
+        async function playVideo(vodId, vodName) {
+            document.getElementById('playLoading').style.display = 'block';
+            document.getElementById('videoList').style.display = 'none';
+            document.getElementById('dplayer').style.display = 'block';
+            document.getElementById('backBtn').style.display = 'block';
+
+            // 初始化D挡绕过
+            bypassTeslaDRestriction();
+
             try {
-                const dp = new DPlayer({
+                // 拼接解析地址（根据接口逻辑，vod_id对应播放地址，这里假设解析接口需要完整播放链接，实际可根据接口调整）
+                // 若解析接口需要其他参数，可修改这里的url拼接逻辑
+                const parseUrl = `${CONFIG.parseApi}${encodeURIComponent(`https://jyzyapi.com/provide/vod/play/${vodId}.m3u8`)}`;
+                
+                // 销毁旧播放器
+                if (dp) dp.destroy();
+
+                // 创建新播放器
+                dp = new DPlayer({
                     container: document.getElementById('dplayer'),
-                    autoplay: true,       // 自动播放（静音状态下特斯拉允许）
-                    muted: true,          // 核心：静音自动播放，避开D挡的交互限制
-                    preload: 'auto',      // 预加载，避免D挡后加载中断
-                    volume: 0.7,          // 默认音量70%（用户可手动调）
-                    video: {
-                        url: videoUrl,
-                        type: 'hls'        // 适配M3U8格式
-                    },
-                    danmaku: false,       // 关闭弹幕，减少资源占用
-                    // HLS优化：提升D挡下的播放流畅度
+                    autoplay: true,
+                    muted: true,
+                    preload: 'auto',
+                    volume: 0.7,
+                    video: { url: parseUrl, type: 'hls' },
+                    danmaku: false,
                     pluginOptions: {
                         hls: {
                             maxBufferLength: 60,
                             maxMaxBufferLength: 90,
                             startLevel: 0,
-                            lowLatencyMode: true,
-                            enableWorker: true
+                            lowLatencyMode: true
                         }
-                    },
-                    // 特斯拉触控优化
-                    controlBar: {
-                        volume: { size: '24px' },
-                        progress: { height: '8px' },
-                        playButton: { size: '36px' }
                     }
                 });
 
-                // 播放器就绪后隐藏加载提示
-                dp.on('ready', hideLoadingTips);
+                // 加载完成隐藏提示
+                dp.on('ready', () => {
+                    document.getElementById('playLoading').style.display = 'none';
+                });
 
                 // 播放错误处理
-                dp.on('error', () => showErrorTips('视频加载失败！<br>检查视频源：<br>' + videoUrl));
-
-                // 特斯拉交互：点击屏幕唤醒控制栏
-                dp.on('click', () => dp.showControl());
-
+                dp.on('error', () => {
+                    document.getElementById('playLoading').style.display = 'none';
+                    alert(`《${vodName}》播放失败，可换其他视频试试`);
+                    backToList();
+                });
             } catch (e) {
-                showErrorTips('播放器初始化失败：<br>' + e.message);
+                document.getElementById('playLoading').style.display = 'none';
+                alert('解析失败：' + e.message);
+                backToList();
             }
         }
 
-        // 延迟初始化，适配特斯拉车机加载节奏
-        window.onload = () => setTimeout(initPlayer, 300);
+        // 返回列表
+        function backToList() {
+            if (dp) dp.destroy();
+            document.getElementById('dplayer').style.display = 'none';
+            document.getElementById('backBtn').style.display = 'none';
+            document.getElementById('playLoading').style.display = 'none';
+            document.getElementById('videoList').style.display = 'block';
+        }
+
+        // 绑定分类标签事件
+        function bindCategoryTabs() {
+            const tabs = document.querySelectorAll('.category-tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // 切换激活状态
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    // 渲染对应分类
+                    renderVideoList(tab.dataset.type);
+                });
+            });
+        }
+
+        // 页面加载初始化
+        window.onload = () => {
+            bindCategoryTabs();
+            collectVideos();
+            // 加载失败重试
+            document.getElementById('listError').addEventListener('click', collectVideos);
+        };
     </script>
 </body>
 </html>
