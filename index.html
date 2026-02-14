@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
-    <title>LGCXS ULTRA (重构版)</title>
+    <title>LGCXS ULTRA (Live Only)</title>
     
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -14,93 +14,103 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <style>
-        :root { --primary: #3b82f6; --bg: #000; --panel: #111; --text: #eee; --border: #333; }
-        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; height: 100vh; overflow: hidden; display: flex; }
+        /* 极简黑金配色 */
+        :root { --primary: #FFD700; --bg: #000; --panel: #111; --text: #eee; --border: #222; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, sans-serif; height: 100vh; overflow: hidden; display: flex; }
         * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
 
-        /* 侧边栏 */
+        /* 左侧：源选择 (加大触控区) */
         #sidebar { width: 260px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 30; }
-        .brand { padding: 25px; font-size: 20px; font-weight: 800; border-bottom: 1px solid var(--border); color: #fff; letter-spacing: 1px; }
-        .source-wrap { padding: 20px; border-bottom: 1px solid var(--border); }
-        #source-btn { width: 100%; background: #222; color: #fff; padding: 15px; border-radius: 12px; border: 1px solid #444; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
+        .brand { padding: 30px 20px; font-size: 22px; font-weight: 900; letter-spacing: 2px; color: var(--primary); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
         
-        #group-list { flex: 1; overflow-y: auto; padding: 10px; }
-        .group-item { padding: 15px; margin-bottom: 5px; border-radius: 8px; cursor: pointer; color: #aaa; display: flex; justify-content: space-between; font-size: 15px; }
-        .group-item.active { background: var(--primary); color: #fff; font-weight: bold; }
+        #group-list { flex: 1; overflow-y: auto; padding: 15px; }
+        .group-title { font-size: 12px; color: #666; margin: 10px 5px; font-weight: bold; text-transform: uppercase; }
+        
+        .nav-item { padding: 18px 15px; margin-bottom: 8px; border-radius: 10px; cursor: pointer; color: #999; display: flex; justify-content: space-between; font-size: 16px; transition: 0.2s; background: rgba(255,255,255,0.02); }
+        .nav-item:active { transform: scale(0.98); }
+        .nav-item.active { background: rgba(255, 215, 0, 0.15); color: var(--primary); border: 1px solid rgba(255, 215, 0, 0.3); font-weight: bold; }
+        .badge { background: #333; padding: 2px 8px; border-radius: 6px; font-size: 12px; color: #aaa; }
 
-        /* 中间列表 */
-        #middle { width: 320px; background: #1a1a1a; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        /* 中间：频道列表 */
+        #middle { width: 300px; background: #0a0a0a; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
         .search-wrap { padding: 20px; border-bottom: 1px solid var(--border); }
-        #search { width: 100%; background: #2c2c2e; border: none; color: #fff; padding: 15px; border-radius: 10px; font-size: 16px; }
-        #channel-list { flex: 1; overflow-y: auto; padding: 10px; }
+        #search { width: 100%; background: #1a1a1a; border: 1px solid #333; color: #fff; padding: 16px; border-radius: 12px; font-size: 16px; }
+        #search:focus { border-color: var(--primary); }
         
-        .item-card { padding: 15px; margin-bottom: 10px; background: rgba(255,255,255,0.03); border-radius: 10px; cursor: pointer; border-left: 4px solid transparent; transition: 0.2s; }
-        .item-card:active { background: #333; transform: scale(0.98); }
-        .item-card.active { background: #222; border-left-color: var(--primary); }
-        .i-title { font-size: 16px; font-weight: 500; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .i-desc { font-size: 12px; color: #666; margin-top: 5px; }
+        #channel-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .channel-item { display: flex; align-items: center; padding: 16px; margin-bottom: 8px; background: #141414; border-radius: 10px; cursor: pointer; border-left: 4px solid transparent; transition: 0.1s; }
+        .channel-item:active { background: #222; }
+        .channel-item.active { background: #222; border-left-color: var(--primary); }
+        .ch-name { font-size: 16px; font-weight: 500; color: #ddd; }
 
-        /* 右侧播放 */
+        /* 右侧：播放区 */
         #stage { flex: 1; position: relative; background: #000; display: flex; flex-direction: column; }
         #player { width: 100%; height: 100%; }
         
-        #status-bar { height: 30px; background: #111; display: flex; align-items: center; padding: 0 20px; font-size: 12px; color: #666; gap: 10px; border-top: 1px solid #222; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #444; }
-        .status-dot.green { background: #22c55e; }
-        .status-dot.red { background: #ef4444; }
-        .status-dot.yellow { background: #eab308; }
+        #status-bar { height: 36px; background: #111; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #888; border-top: 1px solid #222; gap: 8px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #444; }
+        .dot.green { background: #0f0; box-shadow: 0 0 5px #0f0; }
+        .dot.yellow { background: #ff0; }
+        .dot.red { background: #f00; }
 
-        #standby { position: absolute; inset: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; bottom: 30px; }
-        #qrcode-wrap { padding: 15px; background: #fff; border-radius: 16px; }
+        /* 待机页 */
+        #standby { position: absolute; inset: 0; background: radial-gradient(circle, #1a1a1a 0%, #000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; bottom: 36px; }
+        #qrcode-wrap { padding: 15px; background: #fff; border-radius: 16px; box-shadow: 0 0 30px rgba(255,215,0,0.1); }
         
-        /* 模态框 */
+        /* 模态框 (换源) */
         #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; align-items: center; justify-content: center; backdrop-filter: blur(10px); }
-        .modal-box { background: #1c1c1e; width: 90%; max-width: 900px; max-height: 80vh; border-radius: 20px; border: 1px solid #333; display: flex; flex-direction: column; overflow: hidden; }
-        .modal-header { padding: 25px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: #252527; }
-        .source-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; padding: 30px; overflow-y: auto; }
-        .source-card { background: #2c2c2e; padding: 20px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; display: flex; flex-direction: column; gap: 5px; }
-        .source-card:active { border-color: var(--primary); background: #3a3a3c; }
-        .tag { font-size: 11px; padding: 4px 8px; border-radius: 4px; background: #000; color: #888; align-self: flex-start; margin-top: 5px; }
+        .modal-box { background: #111; width: 800px; max-height: 80vh; border-radius: 20px; border: 1px solid #333; display: flex; flex-direction: column; overflow: hidden; }
+        .modal-header { padding: 25px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: bold; }
+        .source-grid { padding: 30px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+        .source-card { background: #1a1a1a; padding: 20px; border-radius: 12px; cursor: pointer; border: 1px solid #333; transition: 0.2s; }
+        .source-card:hover { border-color: var(--primary); background: #222; }
+        .tag { display: inline-block; font-size: 11px; background: #000; padding: 4px 8px; border-radius: 4px; color: #888; margin-top: 8px; }
 
         /* 手机端 */
-        #phone { display: none; height: 100vh; background: #eee; padding: 20px; color: #000; }
+        #phone { display: none; height: 100vh; background: #111; padding: 20px; color: #fff; text-align: center; }
         @media (max-width: 768px) { #sidebar, #middle { display: none; } #phone { display: block; } }
     </style>
 </head>
 <body>
 
     <div id="phone">
-        <h2>📲 特斯拉遥控</h2>
-        <input type="text" id="urlInput" placeholder="粘贴链接..." style="width:100%;padding:20px;border:1px solid #ccc;margin-bottom:15px;border-radius:10px;font-size:16px;">
-        <button onclick="send()" style="width:100%;padding:20px;background:var(--primary);color:#fff;border:none;border-radius:10px;font-size:18px;font-weight:bold;">投屏</button>
+        <h2 style="color:var(--primary)">🚗 车载遥控</h2>
+        <input type="text" id="urlInput" placeholder="在此粘贴直播源..." style="width:100%;padding:20px;border-radius:12px;border:none;margin:20px 0;background:#222;color:#fff;font-size:16px;">
+        <button onclick="send()" style="width:100%;padding:20px;background:var(--primary);color:#000;font-weight:bold;border:none;border-radius:12px;font-size:18px;">立即投屏</button>
     </div>
 
     <div id="sidebar">
-        <div class="brand"><i class="ph-fill ph-rocket"></i> LGCXS ULTRA</div>
-        <div class="source-wrap">
-            <div id="source-btn" onclick="toggleModal(true)">
-                <span id="cur-source">选择资源</span>
-                <i class="ph-bold ph-caret-down"></i>
+        <div class="brand"><i class="ph-fill ph-television"></i> LGCXS TV</div>
+        
+        <div id="group-list">
+            <div class="group-title">当前线路</div>
+            <div class="nav-item active" onclick="toggleModal(true)" id="current-source-btn">
+                <span id="cur-source-name">加载中...</span>
+                <i class="ph-bold ph-swap"></i>
             </div>
+            
+            <div class="group-title" style="margin-top:30px">频道分组</div>
+            <div id="category-list"></div>
         </div>
-        <div id="group-list"></div>
     </div>
 
     <div id="middle">
         <div class="search-wrap">
-            <input type="text" id="search" placeholder="搜索影片/频道..." onkeypress="if(event.keyCode==13) handleSearch()">
+            <input type="text" id="search" placeholder="搜索频道 (如: CCTV)" oninput="handleSearch()">
         </div>
         <div id="channel-list"></div>
     </div>
 
     <div id="stage">
         <div id="player"></div>
+        
         <div id="standby">
             <div id="qrcode-wrap"><div id="qrcode"></div></div>
-            <div style="margin-top:20px;color:#aaa;font-size:14px">微信扫码 / 选择资源</div>
+            <div style="margin-top:20px;color:#666;font-size:14px">微信扫码投屏 / D挡可用</div>
         </div>
+
         <div id="status-bar">
-            <div class="status-dot" id="dot"></div>
+            <div class="dot" id="status-dot"></div>
             <span id="status-text">系统就绪</span>
         </div>
     </div>
@@ -108,39 +118,31 @@
     <div id="modal" onclick="if(event.target.id==='modal')toggleModal(false)">
         <div class="modal-box">
             <div class="modal-header">
-                <span style="font-weight:bold;font-size:18px;color:#fff">资源库 (已校准)</span>
-                <i class="ph-bold ph-x" style="cursor:pointer;color:#fff;font-size:24px" onclick="toggleModal(false)"></i>
+                <span>切换信号源</span>
+                <i class="ph-bold ph-x" style="cursor:pointer" onclick="toggleModal(false)"></i>
             </div>
             <div class="source-grid" id="source-grid"></div>
         </div>
     </div>
 
     <script>
-        // === 🚀 核心：强制代理配置 (解决Mixed Content和跨域) ===
-        // 使用 corsproxy.io 作为中间人，强制把 HTTP 流量转为 HTTPS
+        // === 🚀 纯净配置 ===
         const PROXY = 'https://corsproxy.io/?';
 
-        // === 📚 资源库 (经过测试可用的源) ===
+        // === 📚 精选直播源 (只留最稳的) ===
         const DB = [
-            { title: "🎬 影视点播 (搜索/点播)", items: [
-                { name: "IKUN 资源", url: "https://ikunzy.com/api.php/provide/vod", type: "cms", tag: "极速" },
-                { name: "极速资源", url: "https://jszyapi.com/api.php/provide/vod/from/jsm3u8", type: "cms", tag: "秒播" },
-                { name: "卧龙资源", url: "https://collect.wolongzy.cc/api.php/provide/vod", type: "cms", tag: "稳定" },
-                { name: "索尼资源", url: "https://suoniapi.com/api.php/provide/vod/from/snm3u8", type: "cms", tag: "高清" }
-            ]},
-            { title: "📺 电视直播 (M3U)", items: [
-                { name: "APTV 官方源", url: "https://gh.aptv.app/https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u", type: "m3u", tag: "IPv4/v6" },
-                { name: "YanG Gather", url: "https://tv.iill.top/m3u/Gather", type: "m3u", tag: "海量" },
-                { name: "虎牙一起看", url: "https://live.freetv.top/huyayqk.m3u", type: "m3u", tag: "轮播" }
-            ]}
+            { name: "APTV 官方源", url: "https://gh.aptv.app/https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u", desc: "最稳定，IPv4/v6 双栈", tag: "首选" },
+            { name: "Fanmingming", url: "https://live.fanmingming.com/tv/m3u/ipv6.m3u", desc: "纯 IPv6，速度极快", tag: "极速" },
+            { name: "YanG Gather", url: "https://tv.iill.top/m3u/Gather", desc: "超级聚合，频道最全", tag: "海量" },
+            { name: "Gitee 520", url: "https://gitee.com/bighello/iptv2024/raw/master/all520.m3u", desc: "国内备用线路", tag: "备用" },
+            { name: "虎牙/斗鱼轮播", url: "https://live.freetv.top/huyayqk.m3u", desc: "电影电视剧轮播", tag: "影视" }
         ];
 
         let player = null;
-        let currentApiUrl = "";
-        let currentType = "m3u";
         let allChannels = [];
+        let currentGroup = "全部";
 
-        // 初始化
+        // === 初始化 ===
         const mqttBroker = 'wss://broker.emqx.io:8084/mqtt';
         const getUuid = () => Math.random().toString(36).substring(2, 9);
         const channelId = new URLSearchParams(location.search).get('id') || getUuid();
@@ -154,148 +156,54 @@
         }
 
         function initCar() {
+            // 生成二维码
             const url = `${location.origin}${location.pathname}?mode=sender&id=${channelId}`;
             new QRCode(document.getElementById("qrcode"), { text: url, width: 160, height: 160 });
-            renderModal();
             
-            // 自动加载第一个点播源（通常比直播源更容易测试成功）
-            loadSource(DB[0].items[0]);
+            // 渲染源列表
+            const grid = document.getElementById('source-grid');
+            DB.forEach(src => {
+                const div = document.createElement('div');
+                div.className = 'source-card';
+                div.innerHTML = `<div style="font-weight:bold;color:#fff;font-size:16px">${src.name}</div><div style="font-size:12px;color:#666;margin-top:5px">${src.desc}</div><span class="tag">${src.tag}</span>`;
+                div.onclick = () => loadSource(src);
+                grid.appendChild(div);
+            });
+
+            // 默认加载第一个
+            loadSource(DB[0]);
             initMqtt();
         }
 
-        function setStatus(msg, type='normal') {
-            const dot = document.getElementById('dot');
-            const txt = document.getElementById('status-text');
-            txt.innerText = msg;
-            dot.className = 'status-dot ' + (type==='error'?'red':(type==='success'?'green':'yellow'));
-        }
-
-        function renderModal() {
-            const grid = document.getElementById('source-grid');
-            DB.forEach(sec => {
-                grid.innerHTML += `<div style="grid-column:1/-1;color:#007aff;font-weight:bold;margin-top:15px;font-size:14px">${sec.title}</div>`;
-                sec.items.forEach(src => {
-                    const div = document.createElement('div');
-                    div.className = 'source-card';
-                    div.innerHTML = `
-                        <div style="font-weight:bold;font-size:16px;color:#fff">${src.name}</div>
-                        <span class="tag" style="color:${src.type==='cms'?'#f39c12':'#2ecc71'}">${src.tag}</span>
-                    `;
-                    div.onclick = () => loadSource(src);
-                    grid.appendChild(div);
-                });
-            });
-        }
-
-        // === 核心加载调度 ===
+        // === 核心加载逻辑 (M3U Only) ===
         async function loadSource(src) {
             toggleModal(false);
-            document.getElementById('cur-source').innerText = src.name;
-            document.getElementById('channel-list').innerHTML = '<div style="padding:40px;text-align:center;color:#666">正在连接...</div>';
-            document.getElementById('group-list').innerHTML = '';
-            
-            currentType = src.type;
-            currentApiUrl = src.url;
-            setStatus(`正在加载: ${src.name}...`, 'yellow');
+            document.getElementById('cur-source-name').innerText = src.name;
+            setStatus('yellow', '正在拉取频道列表...');
+            document.getElementById('channel-list').innerHTML = '';
+            document.getElementById('category-list').innerHTML = '';
 
             try {
-                if (src.type === 'cms') {
-                    // CMS 点播逻辑
-                    await loadCMSList(src.url);
-                } else {
-                    // M3U 直播逻辑
-                    await loadM3UList(src.url);
+                // 智能代理：如果是 Github/Gitee，强制走代理以确保 CORS 通过
+                let reqUrl = src.url;
+                if (reqUrl.includes('github') || reqUrl.includes('gitee')) {
+                    if (!reqUrl.includes('ghproxy') && !reqUrl.includes('aptv.app')) {
+                        reqUrl = PROXY + encodeURIComponent(reqUrl);
+                    }
                 }
-                setStatus("加载完成", "success");
-            } catch (e) {
-                console.error(e);
-                setStatus("加载失败：请检查网络或换源", "error");
-                document.getElementById('channel-list').innerHTML = '<div style="padding:20px;text-align:center;color:red">连接超时</div>';
-            }
-        }
 
-        // === CMS 智能解析引擎 (修复点播切换) ===
-        async function loadCMSList(apiUrl, keyword = '') {
-            // 构造 XML API 请求，强制走代理
-            let reqUrl = `${apiUrl}?ac=list&pg=1`;
-            if (keyword) reqUrl = `${apiUrl}?ac=list&wd=${encodeURIComponent(keyword)}`;
-            
-            // 关键：不添加任何 headers，完全依赖代理转发
-            const finalUrl = PROXY + encodeURIComponent(reqUrl);
-
-            const res = await fetch(finalUrl);
-            const text = await res.text();
-            
-            // 解析 XML
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(text, "text/xml");
-            const videos = xmlDoc.getElementsByTagName("video");
-
-            const el = document.getElementById('channel-list');
-            el.innerHTML = '';
-            
-            // 左侧显示状态
-            document.getElementById('group-list').innerHTML = `<div class="group-item active" style="text-align:center"><span>${keyword ? '搜索结果' : '最近更新'}</span></div>`;
-
-            if (videos.length === 0) {
-                el.innerHTML = '<div style="text-align:center;padding:20px;color:#666">未找到相关资源</div>';
-                return;
-            }
-
-            for (let i = 0; i < videos.length; i++) {
-                const v = videos[i];
-                // 兼容不同 CMS 的 XML 标签结构
-                const name = v.getElementsByTagName("name")[0]?.textContent || "未知影片";
-                const type = v.getElementsByTagName("type")[0]?.textContent || "影视";
-                const id = v.getElementsByTagName("id")[0]?.textContent;
-                const time = v.getElementsByTagName("last")[0]?.textContent || "";
-
-                const div = document.createElement('div');
-                div.className = 'item-card';
-                div.innerHTML = `
-                    <div class="i-title">${name}</div>
-                    <div class="i-desc">${type} • ${time}</div>
-                `;
-                // 点击卡片 -> 获取详情
-                div.onclick = () => fetchCMSDetail(id);
-                el.appendChild(div);
-            }
-        }
-
-        // 获取 CMS 详情并播放
-        async function fetchCMSDetail(id) {
-            setStatus("正在解析播放地址...", "yellow");
-            const reqUrl = `${currentApiUrl}?ac=detail&ids=${id}`;
-            const finalUrl = PROXY + encodeURIComponent(reqUrl);
-
-            try {
-                const res = await fetch(finalUrl);
+                const res = await fetch(reqUrl);
                 const text = await res.text();
                 
-                // 暴力正则提取 m3u8，兼容性最强
-                const matches = text.match(/(https?:\/\/[^"'$#<>]+\.m3u8)/g);
-                
-                if (matches && matches.length > 0) {
-                    // 默认取第一个，处理 amp; 转义
-                    let playUrl = matches[0].replace(/amp;/g, '');
-                    console.log("Play URL:", playUrl);
-                    playTeslaStable(playUrl);
-                } else {
-                    setStatus("未找到 M3U8 资源，请换源", "error");
-                }
+                parseM3U(text);
+                setStatus('green', `加载成功，共 ${allChannels.length} 个频道`);
             } catch (e) {
-                setStatus("解析地址失败", "error");
+                setStatus('red', '加载失败，请尝试切换其他源');
+                console.error(e);
             }
         }
 
-        // === M3U 逻辑 ===
-        async function loadM3UList(url) {
-            // M3U 同样强制走代理，解决跨域
-            const reqUrl = PROXY + encodeURIComponent(url);
-            
-            const res = await fetch(reqUrl);
-            const text = await res.text();
-            
+        function parseM3U(text) {
             allChannels = [];
             const lines = text.split('\n');
             let info = null;
@@ -305,81 +213,85 @@
                     const g = line.match(/group-title="([^"]*)"/)?.[1] || '其他';
                     const n = line.split(',').pop().trim();
                     info = { name:n, group:g };
-                } else if (!line.startsWith('#') && line && info) {
+                } else if (line && !line.startsWith('#') && info) {
                     allChannels.push({...info, url:line});
                     info = null;
                 }
             });
-            renderGroups();
+            renderCategories();
         }
 
-        function renderGroups() {
+        function renderCategories() {
             const groups = {};
             allChannels.forEach(c => groups[c.group] = (groups[c.group]||0)+1);
-            const list = document.getElementById('group-list');
+            const list = document.getElementById('category-list');
             list.innerHTML = '';
-            
-            // 排序
-            const keys = Object.keys(groups).sort((a,b) => a.includes('央视') ? -1 : 1);
-            
-            // 全部按钮
-            const allBtn = document.createElement('div');
-            allBtn.className = 'group-item active';
-            allBtn.innerHTML = `<span>全部</span><span>${allChannels.length}</span>`;
-            allBtn.onclick = (e) => switchGroup('全部', e.currentTarget);
-            list.appendChild(allBtn);
 
-            keys.forEach(k => {
-                const div = document.createElement('div');
-                div.className = 'group-item';
-                div.innerHTML = `<span>${k}</span><span>${groups[k]}</span>`;
-                div.onclick = (e) => switchGroup(k, e.currentTarget);
-                list.appendChild(div);
+            // 智能排序
+            const keys = Object.keys(groups).sort((a,b) => {
+                if(a.includes('央视') || a.includes('CCTV')) return -1;
+                if(b.includes('央视') || b.includes('CCTV')) return 1;
+                return 0;
             });
-            renderM3UChannels(allChannels);
+
+            // 全部按钮
+            createNavBtn('全部频道', allChannels.length, '全部');
+
+            keys.forEach(k => createNavBtn(k, groups[k], k));
+            
+            // 默认选中全部
+            switchGroup('全部');
         }
 
-        function switchGroup(group, el) {
-            document.querySelectorAll('.group-item').forEach(i=>i.classList.remove('active'));
-            el.classList.add('active');
+        function createNavBtn(name, count, id) {
+            const div = document.createElement('div');
+            div.className = 'nav-item';
+            div.innerHTML = `<span>${name}</span><span class="badge">${count}</span>`;
+            div.onclick = (e) => {
+                document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
+                e.currentTarget.classList.add('active');
+                switchGroup(id);
+            };
+            if(id === '全部') div.classList.add('active'); // 默认选中
+            document.getElementById('category-list').appendChild(div);
+        }
+
+        function switchGroup(group) {
+            currentGroup = group;
             const list = group==='全部' ? allChannels : allChannels.filter(c=>c.group===group);
-            renderM3UChannels(list);
+            renderChannels(list);
+            document.getElementById('search').value = '';
         }
 
-        function renderM3UChannels(list) {
+        function renderChannels(list) {
             const el = document.getElementById('channel-list');
             el.innerHTML = '';
-            // 性能优化：限制显示数量
-            list.slice(0, 150).forEach(c => {
+            // 性能优化：只渲染前 100 个，避免车机浏览器卡死
+            list.slice(0, 100).forEach(c => {
                 const div = document.createElement('div');
-                div.className = 'item-card';
-                div.innerHTML = `<div class="i-title">${c.name}</div>`;
-                div.onclick = () => playTeslaStable(c.url);
+                div.className = 'channel-item';
+                div.innerHTML = `<div class="ch-name">${c.name}</div>`;
+                div.onclick = () => play(c.url);
                 el.appendChild(div);
             });
         }
 
         function handleSearch() {
-            const val = document.getElementById('search').value.trim();
-            if (!val) return;
-            if (currentType === 'cms') {
-                loadCMSList(currentApiUrl, val);
-            } else {
-                const res = allChannels.filter(c => c.name.toLowerCase().includes(val.toLowerCase()));
-                renderM3UChannels(res);
-            }
+            const val = document.getElementById('search').value.toLowerCase();
+            if(!val) return switchGroup(currentGroup);
+            const res = allChannels.filter(c => c.name.toLowerCase().includes(val));
+            renderChannels(res);
         }
 
-        // === 播放器核心 (防拦截) ===
-        function playTeslaStable(url) {
+        // === 🎥 播放核心 (特斯拉优化) ===
+        function play(url) {
             document.getElementById('standby').style.display = 'none';
-            
-            // 强制 HTTP -> HTTPS 代理隧道
+            setStatus('yellow', '正在建立连接...');
+
+            // ⚠️ 混合内容修复：如果是 HTTPS 网页播 HTTP 视频，必须走代理
             if (location.protocol === 'https:' && url.startsWith('http:')) {
-                setStatus("正在进行安全协议转换...", "yellow");
+                console.log("Auto-Proxying HTTP stream...");
                 url = PROXY + encodeURIComponent(url);
-            } else {
-                setStatus("正在建立连接...", "normal");
             }
 
             if (!player) {
@@ -387,44 +299,50 @@
                     id: 'player',
                     url: url,
                     autoplay: true,
-                    muted: true, // 先静音防止被车机拦截
+                    muted: true, // 必须静音起步，防止被车机拦截
                     playsinline: true,
                     fluid: true,
                     plugins: [window.HlsJsPlugin],
                     cssFullscreen: true,
                     width: '100%',
-                    height: '100%',
-                    playbackRate: [1, 1.25, 1.5, 2]
+                    height: '100%'
                 });
 
                 player.on('ready', () => {
-                    setStatus("播放中", "success");
-                    // 1.5秒后尝试开启声音
-                    setTimeout(() => { player.muted = false; player.volume = 0.8; }, 1500);
+                    setStatus('green', '播放中');
+                    // 1.5秒后尝试自动开启声音
+                    setTimeout(() => { 
+                        player.muted = false; 
+                        player.volume = 0.8; 
+                    }, 1500);
                 });
 
-                player.on('error', () => {
-                    setStatus("播放失败：源失效或无法连接", "error");
-                });
+                player.on('error', () => setStatus('red', '播放失败 (源失效/网络限制)'));
+                player.once('play', () => player.getCssFullscreen());
 
             } else {
                 player.src = url;
-                player.muted = true;
+                player.muted = true; // 切台时先静音
                 player.play().then(() => {
-                    setTimeout(() => { player.muted = false; }, 1500);
+                    setTimeout(() => { player.muted = false; }, 1000);
                 });
             }
         }
 
-        function toggleModal(show) { document.getElementById('modal').style.display = show?'flex':'none'; }
+        function setStatus(color, text) {
+            document.getElementById('status-dot').className = `dot ${color}`;
+            document.getElementById('status-text').innerText = text;
+        }
+
+        function toggleModal(show) { document.getElementById('modal').style.display = show ? 'flex' : 'none'; }
 
         function initMqtt() {
             const client = mqtt.connect(mqttBroker);
             client.on('connect', () => {
                 client.subscribe(topic);
-                if (new URLSearchParams(location.search).get('mode') === 'sender') alert("已连接车机");
+                if(new URLSearchParams(location.search).get('mode') === 'sender') alert("已连接车机");
             });
-            client.on('message', (t, m) => playTeslaStable(m.toString()));
+            client.on('message', (t, m) => play(m.toString()));
             window.send = () => {
                 const u = document.getElementById('urlInput').value.trim();
                 if(u) { client.publish(topic, u); alert("已发送"); }
