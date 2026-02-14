@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
-    <title>Tesla CarPlay - 副驾观影</title>
+    <title>Tesla CarPlay Ultimate</title>
     
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -14,167 +14,152 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <style>
-        /* 特斯拉风格黑金配色 */
-        :root { --primary: #E31937; --bg: #000; --panel: #111; --text: #eee; --border: #222; }
-        body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Tesla', sans-serif; height: 100vh; overflow: hidden; display: flex; }
+        /* 特斯拉 Model 3/Y 风格配色 */
+        :root { --primary: #E31937; --bg: #000; --panel: #121212; --text: #eee; --border: #222; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; display: flex; }
         * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
 
-        /* 左侧：源选择 (加大触控区) */
-        #sidebar { width: 280px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 30; }
-        .brand { padding: 25px 20px; font-size: 20px; font-weight: 700; letter-spacing: 1px; color: var(--primary); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+        /* 左侧导航 */
+        #sidebar { width: 260px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 30; }
+        .brand { padding: 25px 20px; font-size: 20px; font-weight: 800; color: var(--primary); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; letter-spacing: 1px; }
         
         #group-list { flex: 1; overflow-y: auto; padding: 15px; }
-        .group-title { font-size: 12px; color: #666; margin: 10px 5px; font-weight: bold; text-transform: uppercase; }
+        .group-title { font-size: 12px; color: #666; margin: 15px 5px 8px; font-weight: bold; text-transform: uppercase; }
         
-        .nav-item { padding: 16px 15px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; color: #999; display: flex; justify-content: space-between; font-size: 15px; transition: 0.2s; background: rgba(255,255,255,0.02); }
+        .nav-item { padding: 16px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; color: #aaa; display: flex; justify-content: space-between; font-size: 15px; transition: 0.2s; background: rgba(255,255,255,0.03); }
         .nav-item:active { transform: scale(0.98); }
         .nav-item.active { background: rgba(227, 25, 55, 0.15); color: var(--primary); border: 1px solid rgba(227, 25, 55, 0.3); font-weight: bold; }
-        .badge { background: #333; padding: 2px 8px; border-radius: 6px; font-size: 12px; color: #aaa; }
+        .badge { background: #333; padding: 2px 8px; border-radius: 6px; font-size: 11px; color: #fff; }
 
-        /* 中间：频道列表 */
+        /* 中间列表 */
         #middle { width: 320px; background: #0a0a0a; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-        .search_wrap { padding: 20px; border-bottom: 1px solid var(--border); }
-        #search { width: 100%; background: #1a1a1a; border: 1px solid #333; color: #fff; padding: 14px; border-radius: 10px; font-size: 15px; }
-        #search:focus { border-color: var(--primary); }
+        .search-wrap { padding: 20px; border-bottom: 1px solid var(--border); }
+        #search { width: 100%; background: #1a1a1a; border: 1px solid #333; color: #fff; padding: 14px; border-radius: 10px; font-size: 16px; }
+        #channel-list { flex: 1; overflow-y: auto; padding: 10px; }
         
-        #channel_list { flex: 1; overflow-y: auto; padding: 10px; }
-        .channel_item { display: flex; align-items: center; padding: 14px; margin-bottom: 6px; background: #141414; border-radius: 8px; cursor: pointer; border-left: 3px solid transparent; transition: 0.1s; }
-        .channel_item:active { background: #222; }
-        .channel_item.active { background: #222; border-left-color: var(--primary); }
-        .ch_name { font-size: 15px; font-weight: 500; color: #ddd; }
+        .channel-item { display: flex; align-items: center; padding: 16px; margin-bottom: 8px; background: #141414; border-radius: 10px; cursor: pointer; border-left: 4px solid transparent; transition: 0.1s; }
+        .channel-item:active { background: #222; transform: scale(0.98); }
+        .channel-item.active { background: #222; border-left-color: var(--primary); }
+        .ch-info { overflow: hidden; }
+        .ch-name { font-size: 15px; font-weight: 500; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ch-desc { font-size: 12px; color: #666; margin-top: 4px; }
 
-        /* 右侧：播放区 */
+        /* 右侧播放 */
         #stage { flex: 1; position: relative; background: #000; display: flex; flex-direction: column; }
         #player { width: 100%; height: 100%; }
         
-        #status_bar { height: 32px; background: #111; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #888; border-top: 1px solid #222; gap: 6px; }
-        .dot { width: 6px; height: 6px; border-radius: 50%; background: #444; }
-        .dot.green { background: #0f0; box-shadow: 0 0 5px #0f0; }
-        .dot.yellow { background: #ff0; }
-        .dot.red { background: #f00; }
+        #status-bar { height: 36px; background: #111; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #888; border-top: 1px solid #222; gap: 8px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #444; }
+        .dot.green { background: #22c55e; box-shadow: 0 0 5px #22c55e; }
+        .dot.yellow { background: #eab308; }
+        .dot.red { background: #ef4444; }
 
-        /* 待机页 */
-        #standby { position: absolute; inset: 0; background: radial-gradient(circle, #1a1a1a 0%, #000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; bottom: 32px; }
-        #qrcode_wrap { padding: 12px; background: #fff; border-radius: 14px; box-shadow: 0 0 30px rgba(227,25,55,0.1); }
-        #qrcode_text { margin-top: 15px; color: #666; font-size: 13px; text-align: center; }
+        #standby { position: absolute; inset: 0; background: radial-gradient(circle, #1a1a1a 0%, #000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; bottom: 36px; }
+        #qrcode-wrap { padding: 12px; background: #fff; border-radius: 16px; box-shadow: 0 0 40px rgba(227,25,55,0.15); }
         
-        /* 模态框 (换源) */
+        /* 模态框 */
         #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; align-items: center; justify-content: center; backdrop-filter: blur(10px); }
-        .modal_box { background: #111; width: 850px; max-height: 85vh; border-radius: 18px; border: 1px solid #333; display: flex; flex-direction: column; overflow: hidden; }
-        .modal_header { padding: 20px 25px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; font-size: 17px; font-weight: bold; }
-        .source_grid { padding: 25px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
-        .source_card { background: #1a1a1a; padding: 18px; border-radius: 10px; cursor: pointer; border: 1px solid #333; transition: 0.2s; }
-        .source_card:hover { border-color: var(--primary); background: #222; }
-        .tag { display: inline-block; font-size: 10px; background: #000; padding: 3px 6px; border-radius: 4px; color: #888; margin-top: 6px; }
+        .modal-box { background: #111; width: 900px; max-height: 85vh; border-radius: 20px; border: 1px solid #333; display: flex; flex-direction: column; overflow: hidden; }
+        .modal-header { padding: 25px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: bold; }
+        .source-grid { padding: 30px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+        .source-card { background: #1a1a1a; padding: 20px; border-radius: 12px; cursor: pointer; border: 1px solid #333; transition: 0.2s; display: flex; flex-direction: column; gap: 5px; }
+        .source-card:hover { border-color: var(--primary); background: #222; }
+        .tag { display: inline-block; font-size: 11px; padding: 3px 8px; border-radius: 4px; background: #000; color: #888; align-self: flex-start; }
 
         /* 手机端 */
         #phone { display: none; height: 100vh; background: #111; padding: 20px; color: #fff; text-align: center; }
         @media (max-width: 768px) { #sidebar, #middle { display: none; } #phone { display: block; } }
         
-        /* Tesla特色装饰 */
-        .tesla_logo { font-size: 24px; }
-        .d_park_warning { position: absolute; top: 20px; right: 20px; background: rgba(227, 25, 55, 0.9); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; z-index: 20; }
-        
-        /* 加载指示器 */
-        .loading_spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid rgba(255,255,255,.3); border-radius: 50%; border-top-color: var(--primary); animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        
-        /* 错误信息 */
-        .error_toast { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(227, 25, 55, 0.9); color: white; padding: 10px 20px; border-radius: 6px; z-index: 100; font-size: 14px; }
+        /* 提示框 */
+        #toast { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); background: rgba(227,25,55,0.9); padding: 12px 24px; border-radius: 30px; font-size: 14px; display: none; z-index: 200; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="phone">
-        <h2 style="color:var(--primary); margin-top: 30px;">🚗 特斯拉副驾投屏</h2>
-        <p style="color:#999; margin: 10px 0 20px;">请确保车辆处于P档或驻车状态<br>安全第一，驾驶时请勿操作</p>
-        <input type="text" id="urlInput" placeholder="输入直播链接或视频URL..." style="width:90%;padding:16px;border-radius:10px;border:none;margin:15px 0;background:#222;color:#fff;font-size:16px;">
-        <button onclick="send()" style="width:90%;padding:16px;background:var(--primary);color:#fff;font-weight:bold;border:none;border-radius:10px;font-size:16px;">发送到车机</button>
-        <p style="color:#666; margin-top: 20px; font-size: 14px;">注意：仅在停车状态下使用</p>
+        <h2 style="color:var(--primary); margin-top:40px">🚗 Tesla Remote</h2>
+        <input type="text" id="urlInput" placeholder="在此粘贴直播源或视频链接..." style="width:100%;padding:18px;border-radius:12px;border:none;margin:20px 0;background:#222;color:#fff;font-size:16px;">
+        <button onclick="send()" style="width:100%;padding:18px;background:var(--primary);color:#fff;font-weight:bold;border:none;border-radius:12px;font-size:18px;">立即投屏</button>
+        <p style="color:#666;font-size:12px;margin-top:20px">保持此页面开启以控制车机</p>
     </div>
 
     <div id="sidebar">
-        <div class="brand"><i class="ph-fill ph-television tesla_logo"></i> Tesla CarPlay</div>
+        <div class="brand"><i class="ph-fill ph-car-profile"></i> Tesla CarPlay</div>
         
-        <div id="group_list">
-            <div class="group_title">当前信号源</div>
-            <div class="nav_item active" onclick="toggleModal(true)" id="current_source_btn">
-                <span id="cur_source_name">特斯拉专享源</span>
+        <div id="group-list">
+            <div class="group-title">当前信号源</div>
+            <div class="nav-item active" onclick="toggleModal(true)">
+                <span id="cur-source-name">选择资源库</span>
                 <i class="ph-bold ph-swap"></i>
             </div>
             
-            <div class="group_title" style="margin-top:25px">直播频道</div>
-            <div id="category_list"></div>
-            
-            <div class="group_title" style="margin-top:25px">快捷功能</div>
-            <div class="nav_item" onclick="showSafetyNotice()">
-                <span>安全须知</span>
-                <i class="ph-bold ph-shield-check"></i>
-            </div>
-            <div class="nav_item" onclick="resetConnection()">
-                <span>重置连接</span>
-                <i class="ph-bold ph-arrow-clockwise"></i>
-            </div>
+            <div class="group-title" style="margin-top:30px">频道分组</div>
+            <div id="category-list"></div>
         </div>
     </div>
 
     <div id="middle">
-        <div class="search_wrap">
-            <input type="text" id="search" placeholder="搜索频道..." oninput="handleSearch()">
+        <div class="search-wrap">
+            <input type="text" id="search" placeholder="搜索频道..." onkeypress="if(event.keyCode==13) handleSearch()">
         </div>
-        <div id="channel_list"></div>
+        <div id="channel-list"></div>
     </div>
 
     <div id="stage">
-        <div class="d_park_warning">D档模式 - 副驾观影</div>
+        <div id="toast">系统提示</div>
         <div id="player"></div>
         
         <div id="standby">
-            <div id="qrcode_wrap"><div id="qrcode"></div></div>
-            <div id="qrcode_text">微信扫码投屏<br>安全观影，快乐出行</div>
+            <div id="qrcode-wrap"><div id="qrcode"></div></div>
+            <div style="margin-top:20px;color:#666;font-size:14px">微信扫码投屏 / D挡模式就绪</div>
         </div>
 
-        <div id="status_bar">
-            <div class="dot" id="status_dot"></div>
-            <span id="status_text">特斯拉副驾观影系统就绪</span>
+        <div id="status-bar">
+            <div class="dot" id="status-dot"></div>
+            <span id="status-text">系统就绪</span>
         </div>
     </div>
 
     <div id="modal" onclick="if(event.target.id==='modal')toggleModal(false)">
-        <div class="modal_box">
-            <div class="modal_header">
-                <span>选择直播源</span>
+        <div class="modal-box">
+            <div class="modal-header">
+                <span>媒体资源库</span>
                 <i class="ph-bold ph-x" style="cursor:pointer" onclick="toggleModal(false)"></i>
             </div>
-            <div class="source_grid" id="source_grid"></div>
+            <div class="source-grid" id="source-grid"></div>
         </div>
     </div>
 
     <script>
-        // === 🚗 特斯拉专用车机配置 ===
-        const PROXY = 'https://corsproxy.io/?';
+        // === 🚀 特斯拉核心配置 ===
+        const PROXY = 'https://corsproxy.io/?'; // 强力代理
+        const REQUEST_HEADERS = { 'Accept': 'application/json, text/plain, */*' };
 
-        // === 📺 特斯拉优化直播源 (精选稳定源) ===
+        // === 📚 资源数据库 ===
         const DB = [
-            { name: "Tesla官方推荐", url: "https://gh.aptv.app/https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u", desc: "特斯拉优选，稳定流畅", tag: "官方推荐" },
-            { name: "高清体育频道", url: "https://raw.githubusercontent.com/Fairy8o/IPTV/main/PDX-V6.txt", desc: "体育赛事直播专线", tag: "体育" },
-            { name: "央视卫视合集", url: "https://raw.githubusercontent.com/youshandefeiyang/IPTV/main/main/ys.m3u", desc: "央视卫视完整频道", tag: "综合" },
-            { name: "4K超清频道", url: "https://raw.githubusercontent.com/joevess/IPTV/main/iptv_4k.m3u8", desc: "4K超清画质体验", tag: "4K" },
-            { name: "影视轮播台", url: "https://raw.githubusercontent.com/xyxtv/xyxmain/main/ysc.txt", desc: "电影电视剧轮播", tag: "影视" },
-            { name: "音乐电台", url: "https://raw.githubusercontent.com/Fairy8o/IPTV/main/Radio/Radio.m3u", desc: "在线音乐电台", tag: "音乐" }
+            { title: "📺 电视直播 (M3U)", items: [
+                { name: "APTV 官方源", url: "https://gh.aptv.app/https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u", type: "m3u", tag: "首选" },
+                { name: "Fanmingming IPv6", url: "https://live.fanmingming.com/tv/m3u/ipv6.m3u", type: "m3u", tag: "极速" },
+                { name: "YanG Gather", url: "https://tv.iill.top/m3u/Gather", type: "m3u", tag: "海量" }
+            ]},
+            { title: "🎬 影视点播 (CMS)", items: [
+                { name: "IKUN 资源", url: "https://ikunzy.com/api.php/provide/vod", type: "cms", tag: "热门" },
+                { name: "极速资源", url: "https://jszyapi.com/api.php/provide/vod/from/jsm3u8", type: "cms", tag: "秒播" },
+                { name: "卧龙资源", url: "https://collect.wolongzy.cc/api.php/provide/vod", type: "cms", tag: "老牌" }
+            ]}
         ];
 
         let player = null;
+        let currentApiUrl = "";
+        let currentType = "m3u";
         let allChannels = [];
-        let currentGroup = "全部";
         let mqttClient = null;
-        let isConnected = false;
 
         // === 初始化 ===
         const mqttBroker = 'wss://broker.emqx.io:8084/mqtt';
         const getUuid = () => Math.random().toString(36).substring(2, 9);
         const channelId = new URLSearchParams(location.search).get('id') || getUuid();
-        const topic = `tesla/carplay/${channelId}`;
+        const topic = `tesla/car/${channelId}`;
 
         if (new URLSearchParams(location.search).get('mode') === 'sender') {
             document.getElementById('phone').style.display = 'block';
@@ -184,96 +169,152 @@
         }
 
         function initCar() {
-            // 生成特拉斯投屏二维码
-            const url = `${location.origin}${location.pathname}?mode=sender&id=${channelId}`;
-            new QRCode(document.getElementById("qrcode"), { 
-                text: url, 
-                width: 180, 
-                height: 180,
-                colorDark: "#000000",
-                colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.H
-            });
-            
-            // 渲染特斯拉专属源列表
-            const grid = document.getElementById('source_grid');
-            DB.forEach(src => {
-                const div = document.createElement('div');
-                div.className = 'source_card';
-                div.innerHTML = `
-                    <div style="font-weight:bold;color:#fff;font-size:15px">${src.name}</div>
-                    <div style="font-size:12px;color:#666;margin-top:5px">${src.desc}</div>
-                    <span class="tag">${src.tag}</span>
-                `;
-                div.onclick = () => loadSource(src);
-                grid.appendChild(div);
-            });
+            // 特斯拉 D挡保活逻辑 (每秒检查一次播放状态)
+            setInterval(() => {
+                const v = document.querySelector('video');
+                if (v && v.paused && v.currentTime > 0 && !v.ended) {
+                    console.log("Tesla auto-pause detected, forcing play...");
+                    v.play().catch(()=>{});
+                }
+            }, 1000);
 
-            // 默认加载特斯拉推荐源
-            loadSource(DB[0]);
-            initMqtt();
+            // 生成二维码
+            const url = `${location.origin}${location.pathname}?mode=sender&id=${channelId}`;
+            new QRCode(document.getElementById("qrcode"), { text: url, width: 160, height: 160 });
             
-            // 显示安全提示
-            setTimeout(() => {
-                showSafetyNotice(true);
-            }, 3000);
+            // 渲染资源库
+            renderModal();
+            // 默认加载第一个源
+            loadSource(DB[0].items[0]);
+            initMqtt();
         }
 
-        // === 核心加载逻辑 (特斯拉优化版) ===
+        function renderModal() {
+            const grid = document.getElementById('source-grid');
+            DB.forEach(sec => {
+                grid.innerHTML += `<div style="grid-column:1/-1;color:#666;font-weight:bold;margin-top:10px;font-size:12px">${sec.title}</div>`;
+                sec.items.forEach(src => {
+                    const div = document.createElement('div');
+                    div.className = 'source-card';
+                    div.innerHTML = `
+                        <div style="font-weight:bold;color:#fff;font-size:16px">${src.name}</div>
+                        <span class="tag" style="color:${src.type==='cms'?'#eab308':'#22c55e'}">${src.tag}</span>
+                    `;
+                    div.onclick = () => loadSource(src);
+                    grid.appendChild(div);
+                });
+            });
+        }
+
+        // === 核心加载逻辑 ===
         async function loadSource(src) {
             toggleModal(false);
-            document.getElementById('cur_source_name').innerText = src.name;
-            setStatus('yellow', '特斯拉正在获取频道列表...');
-            document.getElementById('channel_list').innerHTML = '';
-            document.getElementById('category_list').innerHTML = '';
+            document.getElementById('cur-source-name').innerText = src.name;
+            setStatus('yellow', '正在连接云端...');
+            document.getElementById('channel-list').innerHTML = '';
+            document.getElementById('category-list').innerHTML = '';
+            
+            currentType = src.type;
+            currentApiUrl = src.url;
 
             try {
-                // 特斯拉智能代理：针对不同源类型优化
-                let reqUrl = src.url;
-                if (reqUrl.includes('github') || reqUrl.includes('raw.githubusercontent')) {
-                    reqUrl = PROXY + encodeURIComponent(reqUrl);
+                if (src.type === 'cms') {
+                    await loadCMSList(src.url);
+                } else {
+                    await loadM3UList(src.url);
                 }
-
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
-                
-                const res = await fetch(reqUrl, { signal: controller.signal });
-                clearTimeout(timeoutId);
-                
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                
-                const text = await res.text();
-                parseM3U(text);
-                setStatus('green', `特斯拉已加载 ${allChannels.length} 个频道`);
+                setStatus('green', '资源加载完成');
             } catch (e) {
-                setStatus('red', '加载失败，请尝试其他源');
-                console.error('Source loading error:', e);
-                showError('直播源加载失败，请检查网络或更换源');
+                setStatus('red', '加载失败，请换源');
+                showToast("连接超时，请检查网络");
             }
         }
 
-        function parseM3U(text) {
+        // === CMS 逻辑 (点播) ===
+        async function loadCMSList(apiUrl, keyword = '') {
+            // 构造请求：强制走代理，不带 headers
+            let reqUrl = `${apiUrl}?ac=list&pg=1`;
+            if (keyword) reqUrl = `${apiUrl}?ac=list&wd=${encodeURIComponent(keyword)}`;
+            const finalUrl = PROXY + encodeURIComponent(reqUrl);
+
+            const res = await fetch(finalUrl);
+            const text = await res.text();
+            
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(text, "text/xml");
+            const videos = xmlDoc.getElementsByTagName("video");
+
+            const el = document.getElementById('channel-list');
+            el.innerHTML = '';
+            
+            // 左侧显示状态
+            document.getElementById('category-list').innerHTML = `<div class="nav-item active"><span>${keyword ? '搜索结果' : '最新更新'}</span></div>`;
+
+            if (videos.length === 0) {
+                el.innerHTML = '<div style="text-align:center;padding:20px;color:#666">未找到相关资源</div>';
+                return;
+            }
+
+            for (let i = 0; i < videos.length; i++) {
+                const v = videos[i];
+                const name = v.getElementsByTagName("name")[0]?.textContent;
+                const type = v.getElementsByTagName("type")[0]?.textContent;
+                const id = v.getElementsByTagName("id")[0]?.textContent;
+                const time = v.getElementsByTagName("last")[0]?.textContent;
+
+                const div = document.createElement('div');
+                div.className = 'channel-item';
+                div.innerHTML = `
+                    <div class="ch-info">
+                        <div class="ch-name">${name}</div>
+                        <div class="ch-desc">${type} • ${time}</div>
+                    </div>
+                `;
+                div.onclick = () => fetchCMSDetail(id);
+                el.appendChild(div);
+            }
+        }
+
+        async function fetchCMSDetail(id) {
+            setStatus('yellow', '正在解析地址...');
+            const reqUrl = `${currentApiUrl}?ac=detail&ids=${id}`;
+            const finalUrl = PROXY + encodeURIComponent(reqUrl);
+
+            try {
+                const res = await fetch(finalUrl);
+                const text = await res.text();
+                const matches = text.match(/(https?:\/\/[^"'$#<>]+\.m3u8)/g);
+                
+                if (matches && matches.length > 0) {
+                    let playUrl = matches[0].replace(/amp;/g, '');
+                    playTeslaStable(playUrl);
+                } else {
+                    showToast("未找到 M3U8 资源");
+                }
+            } catch (e) {
+                showToast("解析失败");
+            }
+        }
+
+        // === M3U 逻辑 (直播) ===
+        async function loadM3UList(url) {
+            // 直播源也强制走代理，防止跨域
+            let reqUrl = PROXY + encodeURIComponent(url);
+            
+            const res = await fetch(reqUrl);
+            const text = await res.text();
+            
             allChannels = [];
             const lines = text.split('\n');
             let info = null;
             lines.forEach(line => {
                 line = line.trim();
                 if (line.startsWith('#EXTINF')) {
-                    // 解析扩展信息
-                    const groupMatch = line.match(/group-title="([^"]*)"/);
-                    const tvgNameMatch = line.match(/tvg-name="([^"]*)"/);
-                    const logoMatch = line.match(/tvg-logo="([^"]*)"/);
-                    
-                    const group = groupMatch ? groupMatch[1] : '其他';
-                    const name = tvgNameMatch ? tvgNameMatch[1] : line.split(',').pop().trim();
-                    
-                    info = { 
-                        name: name || line.split(',').pop().trim(),
-                        group: group,
-                        logo: logoMatch ? logoMatch[1] : ''
-                    };
+                    const g = line.match(/group-title="([^"]*)"/)?.[1] || '其他';
+                    const n = line.split(',').pop().trim();
+                    info = { name:n, group:g };
                 } else if (line && !line.startsWith('#') && info) {
-                    allChannels.push({...info, url: line});
+                    allChannels.push({...info, url:line});
                     info = null;
                 }
             });
@@ -283,38 +324,31 @@
         function renderCategories() {
             const groups = {};
             allChannels.forEach(c => groups[c.group] = (groups[c.group]||0)+1);
-            const list = document.getElementById('category_list');
+            const list = document.getElementById('category-list');
             list.innerHTML = '';
 
-            // 特斯拉智能排序
             const keys = Object.keys(groups).sort((a,b) => {
-                if(a.includes('央视') || a.includes('CCTV') || a.includes('中央')) return -1;
-                if(b.includes('央视') || b.includes('CCTV') || b.includes('中央')) return 1;
-                if(a.includes('卫') && !b.includes('卫')) return -1;
-                if(b.includes('卫') && !a.includes('卫')) return 1;
-                return a.localeCompare(b);
+                if(a.includes('央视')) return -1;
+                if(b.includes('央视')) return 1;
+                return 0;
             });
 
-            // 全部按钮
-            createNavBtn('全部频道', allChannels.length, '全部');
-
+            createNavBtn('全部', allChannels.length, '全部');
             keys.forEach(k => createNavBtn(k, groups[k], k));
-            
-            // 默认选中全部
             switchGroup('全部');
         }
 
         function createNavBtn(name, count, id) {
             const div = document.createElement('div');
-            div.className = 'nav_item';
+            div.className = 'nav-item';
             div.innerHTML = `<span>${name}</span><span class="badge">${count}</span>`;
             div.onclick = (e) => {
-                document.querySelectorAll('.nav_item').forEach(i=>i.classList.remove('active'));
+                document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
                 e.currentTarget.classList.add('active');
                 switchGroup(id);
             };
             if(id === '全部') div.classList.add('active');
-            document.getElementById('category_list').appendChild(div);
+            document.getElementById('category-list').appendChild(div);
         }
 
         function switchGroup(group) {
@@ -325,37 +359,36 @@
         }
 
         function renderChannels(list) {
-            const el = document.getElementById('channel_list');
+            const el = document.getElementById('channel-list');
             el.innerHTML = '';
-            // 特斯拉性能优化：限制显示数量
-            const displayList = list.slice(0, 120);
-            displayList.forEach(c => {
+            list.slice(0, 100).forEach(c => {
                 const div = document.createElement('div');
-                div.className = 'channel_item';
-                div.innerHTML = `<div class="ch_name">${c.name}</div>`;
-                div.onclick = () => play(c.url);
+                div.className = 'channel-item';
+                div.innerHTML = `<div class="ch-name">${c.name}</div>`;
+                div.onclick = () => playTeslaStable(c.url);
                 el.appendChild(div);
             });
         }
 
         function handleSearch() {
             const val = document.getElementById('search').value.toLowerCase();
-            if(!val) return switchGroup(currentGroup);
-            const res = allChannels.filter(c => 
-                c.name.toLowerCase().includes(val) || 
-                c.group.toLowerCase().includes(val)
-            );
-            renderChannels(res);
+            if(!val) return;
+            
+            if (currentType === 'cms') {
+                loadCMSList(currentApiUrl, val);
+            } else {
+                const res = allChannels.filter(c => c.name.toLowerCase().includes(val));
+                renderChannels(res);
+            }
         }
 
-        // === 🎬 特斯拉车机播放核心 ===
-        function play(url) {
+        // === 🎥 播放核心 (Tesla V2 稳定版) ===
+        function playTeslaStable(url) {
             document.getElementById('standby').style.display = 'none';
-            setStatus('yellow', '特斯拉正在建立连接...');
+            setStatus('yellow', '正在建立安全连接...');
 
-            // 特斯拉安全检查：HTTPS/HTTP混合内容处理
+            // 强制 HTTP -> HTTPS 代理
             if (location.protocol === 'https:' && url.startsWith('http:')) {
-                console.log("Tesla Auto-Proxying insecure stream...");
                 url = PROXY + encodeURIComponent(url);
             }
 
@@ -364,230 +397,66 @@
                     id: 'player',
                     url: url,
                     autoplay: true,
-                    muted: true, // 特斯拉默认静音启动
+                    muted: true, // 核心：静音起步
                     playsinline: true,
                     fluid: true,
-                    videoAttributes: {
-                        webkit-playsinline: true,
-                        playsInline: true,
-                        crossOrigin: 'anonymous'
-                    },
                     plugins: [window.HlsJsPlugin],
                     cssFullscreen: true,
                     width: '100%',
                     height: '100%',
-                    // 特斯拉优化参数
-                    playbackRate: [0.5, 0.75, 1, 1.25, 1.5, 2],
-                    lang: 'zh-cn',
-                    whitelist: ['*'],
-                    volume: 0.8
+                    playbackRate: [1, 1.25, 1.5, 2]
                 });
 
                 player.on('ready', () => {
-                    setStatus('green', '特斯拉播放中');
-                    // 安全延时解除静音
+                    setStatus('green', '播放中 (D挡保护激活)');
+                    // 1.5秒后自动开启声音
                     setTimeout(() => { 
                         player.muted = false; 
-                        player.volume = 0.7; 
-                    }, 2000);
+                        player.volume = 0.8; 
+                    }, 1500);
                 });
 
-                player.on('error', (err) => {
-                    setStatus('red', '播放失败 - 检查链接');
-                    console.error('Tesla player error:', err);
-                    showError('视频播放失败，请检查链接有效性');
+                player.on('error', () => {
+                    setStatus('red', '播放失败');
+                    showToast("源失效或无法连接");
                 });
                 
-                player.on('waiting', () => {
-                    setStatus('yellow', '特斯拉缓冲中...');
-                });
-                
-                player.on('playing', () => {
-                    setStatus('green', '特斯拉播放中');
-                });
-                
-                player.on('pause', () => {
-                    setStatus('yellow', '已暂停');
-                });
-                
-                player.once('play', () => {
-                    player.getCssFullscreen();
-                });
+                player.once('play', () => player.getCssFullscreen());
 
             } else {
-                // 切换频道
                 player.src = url;
-                player.muted = true; // 切台时先静音
+                player.muted = true;
                 player.play().then(() => {
-                    setTimeout(() => { 
-                        player.muted = false; 
-                        player.volume = 0.7; 
-                    }, 1500);
-                }).catch(err => {
-                    setStatus('red', '播放失败 - 检查链接');
-                    console.error('Channel change error:', err);
-                    showError('频道切换失败，请重试');
+                    setTimeout(() => { player.muted = false; }, 1500);
                 });
             }
         }
 
         function setStatus(color, text) {
-            document.getElementById('status_dot').className = `dot ${color}`;
-            document.getElementById('status_text').innerText = text;
+            document.getElementById('status-dot').className = `dot ${color}`;
+            document.getElementById('status-text').innerText = text;
         }
 
-        function toggleModal(show) { 
-            document.getElementById('modal').style.display = show ? 'flex' : 'none'; 
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg; t.style.display = 'block';
+            setTimeout(()=>t.style.display='none', 3000);
         }
-        
-        function showError(message) {
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'error_toast';
-            errorDiv.textContent = message;
-            document.body.appendChild(errorDiv);
-            
-            setTimeout(() => {
-                if (errorDiv.parentNode) {
-                    errorDiv.parentNode.removeChild(errorDiv);
-                }
-            }, 3000);
-        }
-        
-        function showSafetyNotice(firstTime = false) {
-            if (firstTime) {
-                alert("⚠️ 安全提醒：\n\n此功能仅供副驾驶乘客在车辆停稳后使用\n驾驶员请专注于驾驶，切勿分心观看视频\n\n祝您旅途愉快！");
-            } else {
-                alert("请确保车辆处于P档或完全停稳状态\n安全观影，快乐出行！");
-            }
-        }
-        
-        function resetConnection() {
-            if (mqttClient) {
-                mqttClient.end(true);
-                isConnected = false;
-                setStatus('yellow', '连接已重置');
-                setTimeout(() => {
-                    initMqtt();
-                }, 1000);
-            }
-        }
+
+        function toggleModal(show) { document.getElementById('modal').style.display = show?'flex':'none'; }
 
         function initMqtt() {
-            try {
-                setStatus('yellow', '特斯拉连接中...');
-                
-                // MQTT连接选项
-                const options = {
-                    clientId: `tesla_carplay_${getUuid()}`,
-                    clean: true,
-                    connectTimeout: 10000,
-                    reconnectPeriod: 3000,
-                    will: {
-                        topic: topic,
-                        payload: 'disconnected',
-                        qos: 0,
-                        retain: false
-                    }
-                };
-
-                mqttClient = mqtt.connect(mqttBroker, options);
-                
-                mqttClient.on('connect', () => {
-                    isConnected = true;
-                    console.log('Tesla MQTT connected');
-                    mqttClient.subscribe(topic, { qos: 0 }, (err) => {
-                        if (err) {
-                            console.error('Tesla subscribe error:', err);
-                            setStatus('red', '订阅失败');
-                        } else {
-                            console.log('Tesla subscribed to:', topic);
-                            setStatus('green', '特斯拉连接就绪');
-                        }
-                    });
-                    
-                    if(new URLSearchParams(location.search).get('mode') === 'sender') {
-                        setStatus('green', '已连接特斯拉车机');
-                    }
-                });
-                
-                mqttClient.on('message', (t, m) => {
-                    const url = m.toString();
-                    console.log('Tesla received URL:', url);
-                    if (url !== 'disconnected') {
-                        play(url);
-                    }
-                });
-                
-                mqttClient.on('error', (err) => {
-                    console.error('Tesla MQTT error:', err);
-                    setStatus('red', '连接错误');
-                    isConnected = false;
-                });
-                
-                mqttClient.on('close', () => {
-                    console.log('Tesla MQTT connection closed');
-                    if (isConnected) {
-                        setStatus('red', '连接断开 - 正在重连');
-                        isConnected = false;
-                    }
-                });
-                
-                // 手机端发送函数
-                window.send = () => {
-                    const input = document.getElementById('urlInput');
-                    const url = input.value.trim();
-                    
-                    if (!url) {
-                        showError('请输入有效的视频链接');
-                        return;
-                    }
-                    
-                    // 简单URL验证
-                    try {
-                        new URL(url);
-                    } catch (e) {
-                        showError('请输入正确的URL格式');
-                        return;
-                    }
-                    
-                    if (mqttClient && mqttClient.connected) {
-                        mqttClient.publish(topic, url, { qos: 0 }, (err) => {
-                            if(err) {
-                                console.error('Tesla publish error:', err);
-                                showError('发送失败，请重试');
-                            } else {
-                                input.value = ''; // 清空输入框
-                                setStatus('green', '已发送到特斯拉车机');
-                                setTimeout(() => setStatus('green', '特斯拉连接就绪'), 2500);
-                            }
-                        });
-                    } else {
-                        showError('未连接到特斯拉车机');
-                    }
-                }
-            } catch (e) {
-                console.error('Tesla MQTT initialization failed:', e);
-                setStatus('red', '初始化失败');
-                showError('系统初始化失败，请刷新页面重试');
+            mqttClient = mqtt.connect(mqttBroker);
+            mqttClient.on('connect', () => {
+                mqttClient.subscribe(topic);
+                if(new URLSearchParams(location.search).get('mode') === 'sender') showToast("已连接车机");
+            });
+            mqttClient.on('message', (t, m) => playTeslaStable(m.toString()));
+            window.send = () => {
+                const u = document.getElementById('urlInput').value.trim();
+                if(u) { mqttClient.publish(topic, u); showToast("已发送"); }
             }
         }
-        
-        // 页面卸载时清理资源
-        window.addEventListener('beforeunload', () => {
-            if (mqttClient) {
-                mqttClient.end(true);
-            }
-            if (player) {
-                player.destroy();
-            }
-        });
-        
-        // D档提示
-        console.log("Tesla CarPlay System Active - D Gear Mode");
-        console.log("ID:", channelId);
     </script>
 </body>
 </html>
-
-
-
