@@ -11,7 +11,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #000; color: #fff; font-family: sans-serif; padding: 20px; }
         .title { font-size: 22px; margin-bottom: 20px; text-align: center; }
-        /* 搜索框样式 */
+        /* 搜索框（特斯拉触控优化） */
         .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
         #searchInput { 
             flex: 1; 
@@ -33,11 +33,11 @@
             cursor: pointer; 
             height: 48px;
         }
-        /* 分类标签 */
+        /* 分类标签（对齐金鹰接口type_name） */
         .category-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 10px; }
         .category-tab { padding: 8px 15px; background: #111; border: 1px solid #333; border-radius: 20px; font-size: 14px; cursor: pointer; white-space: nowrap; }
         .category-tab.active { background: #0071e3; border-color: #0071e3; }
-        /* 视频列表 */
+        /* 视频列表（特斯拉触控友好） */
         .video-list { margin-bottom: 30px; }
         .video-item { 
             background: #111; 
@@ -72,20 +72,19 @@
     <h1 class="title">特斯拉金鹰观影</h1>
     <!-- 搜索框 -->
     <div class="search-box">
-        <input type="text" id="searchInput" placeholder="输入影片名称搜索...">
+        <input type="text" id="searchInput" placeholder="输入影片名称搜索（如：开拓者VS爵士）">
         <button id="searchBtn">搜索</button>
     </div>
-    <!-- 分类标签（匹配官网导航） -->
+    <!-- 分类标签（完全对齐金鹰接口返回的type_name） -->
     <div class="category-tabs" id="categoryTabs">
         <div class="category-tab active" data-type="all">全部</div>
-        <div class="category-tab" data-type="电视剧">电视剧</div>
-        <div class="category-tab" data-type="电影">电影</div>
-        <div class="category-tab" data-type="动漫">动漫</div>
-        <div class="category-tab" data-type="综艺">综艺</div>
+        <div class="category-tab" data-type="篮球">篮球</div>
+        <div class="category-tab" data-type="足球">足球</div>
+        <div class="category-tab" data-type="日本动漫">日本动漫</div>
         <div class="category-tab" data-type="短剧">短剧</div>
-        <div class="category-tab" data-type="伦理片">伦理片</div>
-        <div class="category-tab" data-type="体育赛事">体育赛事</div>
-        <div class="category-tab" data-type="预告片">预告片</div>
+        <div class="category-tab" data-type="剧情片">剧情片</div>
+        <div class="category-tab" data-type="综艺">综艺</div>
+        <div class="category-tab" data-type="日剧">日剧</div>
     </div>
     <!-- 视频列表 -->
     <div class="loading-tips" id="listLoading">正在加载视频列表...</div>
@@ -101,43 +100,42 @@
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
 
     <script>
-        // 🔥 金鹰资源接口配置（加入CORS代理）
+        // 金鹰资源接口配置（核心）
         const CONFIG = {
-            // CORS代理地址
-            proxy: "https://api.allorigins.win/get?url=",
-            // 优先用JSON采集接口（解析更简单）
-            collectApi: "https://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json",
-            // M3U8解析接口
-            parseApi: "https://hd.iapijy.com/play?url=",
-            // 备用采集接口（去掉s）
-            backupCollectApi: "http://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json"
+            proxy: "https://api.allorigins.win/get?url=", // CORS跨域代理
+            collectApi: "https://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json", // 视频列表接口
+            detailApi: "https://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json?ac=detail&ids=", // 视频详情（获取播放地址）
+            parseApi: "https://hd.iapijy.com/play?url=", // M3U8解析接口
+            backupCollectApi: "http://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json" // 备用列表接口（去掉s）
         };
 
         let dp = null; // 播放器实例
         let allVideos = []; // 所有视频数据
-        let currentType = 'all'; // 当前选中的分类
+        let currentType = 'all'; // 当前选中分类
 
-        // 绕过特斯拉D挡限制（核心逻辑）
+        // 🔥 核心：特斯拉D挡绕过逻辑（行驶中不暂停）
         function bypassTeslaDRestriction() {
+            // 拦截视频pause事件，强制播放
             document.addEventListener('pause', function(e) {
                 if (e.target.tagName === 'VIDEO' && window.navigator.userAgent.includes('Tesla')) {
                     e.preventDefault();
                     e.target.play();
                 }
             }, true);
+            // 适配特斯拉视频播放规则
             const video = document.createElement('video');
             video.setAttribute('playsinline', 'true');
             video.setAttribute('webkit-playsinline', 'true');
         }
 
-        // 采集视频列表（通过CORS代理）
+        // 采集视频列表（通过CORS代理，兼容HTTPS/HTTP）
         async function collectVideos() {
             document.getElementById('listLoading').style.display = 'block';
             document.getElementById('videoList').style.display = 'none';
             document.getElementById('listError').style.display = 'none';
 
             try {
-                // 先调用HTTPS采集接口（通过代理）
+                // 优先调用HTTPS接口
                 let response = await fetch(CONFIG.proxy + encodeURIComponent(CONFIG.collectApi), { timeout: 15000 });
                 if (!response.ok) throw new Error('HTTPS采集失败，切换HTTP');
                 
@@ -146,9 +144,9 @@
                 if (!parsedData.list || parsedData.list.length === 0) throw new Error('无数据，切换备用接口');
 
                 allVideos = parsedData.list;
-                renderVideoList(currentType); // 按当前分类显示
+                renderVideoList(currentType); // 渲染当前分类视频
             } catch (e) {
-                // 切换备用接口（去掉s，通过代理）
+                // 切换备用HTTP接口
                 try {
                     const backupResponse = await fetch(CONFIG.proxy + encodeURIComponent(CONFIG.backupCollectApi), { timeout: 15000 });
                     const backupData = await backupResponse.json();
@@ -171,29 +169,30 @@
             const list = document.getElementById('videoList');
             list.innerHTML = "";
 
-            // 先按分类过滤
+            // 1. 按分类过滤（严格对齐接口type_name）
             let filteredVideos = type === 'all' 
                 ? allVideos 
                 : allVideos.filter(video => video.type_name === type);
 
-            // 再按搜索关键词过滤（支持模糊匹配）
+            // 2. 按搜索关键词过滤（模糊匹配+大小写不敏感）
             if (searchKeyword) {
                 filteredVideos = filteredVideos.filter(video => 
                     video.vod_name.toLowerCase().includes(searchKeyword.toLowerCase())
                 );
             }
 
+            // 无结果提示
             if (filteredVideos.length === 0) {
                 list.innerHTML = '<div style="text-align:center; color:#999; margin-top:20px;">该分类暂无视频或未找到匹配结果</div>';
                 list.style.display = 'block';
                 return;
             }
 
+            // 渲染视频项
             filteredVideos.forEach(video => {
                 const itemDiv = document.createElement('div');
                 itemDiv.className = 'video-item';
-                // 点击解析并播放
-                itemDiv.onclick = () => playVideo(video.vod_id, video.vod_name);
+                itemDiv.onclick = () => playVideo(video.vod_id, video.vod_name); // 点击播放
 
                 const title = document.createElement('div');
                 title.className = 'video-title';
@@ -211,25 +210,31 @@
             list.style.display = 'block';
         }
 
-        // 解析并播放视频（通过CORS代理）
+        // 解析并播放视频（先获取详情接口的真实播放地址）
         async function playVideo(vodId, vodName) {
             document.getElementById('playLoading').style.display = 'block';
             document.getElementById('videoList').style.display = 'none';
             document.getElementById('dplayer').style.display = 'block';
             document.getElementById('backBtn').style.display = 'block';
 
-            // 初始化D挡绕过
+            // 初始化D挡绕过逻辑
             bypassTeslaDRestriction();
 
             try {
-                // 拼接解析地址（通过代理）
-                const playUrl = `https://jyzyapi.com/provide/vod/play/${vodId}.m3u8`;
+                // 1. 调用详情接口获取真实播放地址（列表接口vod_play_url为空）
+                const detailUrl = CONFIG.detailApi + vodId;
+                const detailResponse = await fetch(CONFIG.proxy + encodeURIComponent(detailUrl), { timeout: 15000 });
+                const detailData = await detailResponse.json();
+                const parsedDetailData = JSON.parse(detailData.contents);
+                const playUrl = parsedDetailData.list[0].vod_play_url.split("$")[1] || "";
+
+                if (!playUrl) throw new Error('未获取到播放地址');
+
+                // 2. 拼接解析接口地址
                 const parseUrl = CONFIG.parseApi + encodeURIComponent(playUrl);
                 
-                // 销毁旧播放器
-                if (dp) dp.destroy();
-
-                // 创建新播放器
+                // 3. 初始化播放器
+                if (dp) dp.destroy(); // 销毁旧播放器
                 dp = new DPlayer({
                     container: document.getElementById('dplayer'),
                     autoplay: true,
@@ -239,20 +244,12 @@
                     video: { url: parseUrl, type: 'hls' },
                     danmaku: false,
                     pluginOptions: {
-                        hls: {
-                            maxBufferLength: 60,
-                            maxMaxBufferLength: 90,
-                            startLevel: 0,
-                            lowLatencyMode: true
-                        }
+                        hls: { maxBufferLength: 60, maxMaxBufferLength: 90, startLevel: 0, lowLatencyMode: true }
                     }
                 });
 
                 // 加载完成隐藏提示
-                dp.on('ready', () => {
-                    document.getElementById('playLoading').style.display = 'none';
-                });
-
+                dp.on('ready', () => { document.getElementById('playLoading').style.display = 'none'; });
                 // 播放错误处理
                 dp.on('error', () => {
                     document.getElementById('playLoading').style.display = 'none';
@@ -266,16 +263,16 @@
             }
         }
 
-        // 返回列表
+        // 返回视频列表
         function backToList() {
-            if (dp) dp.destroy();
+            if (dp) dp.destroy(); // 销毁播放器
             document.getElementById('dplayer').style.display = 'none';
             document.getElementById('backBtn').style.display = 'none';
             document.getElementById('playLoading').style.display = 'none';
             document.getElementById('videoList').style.display = 'block';
         }
 
-        // 绑定分类标签事件
+        // 绑定分类标签切换事件
         function bindCategoryTabs() {
             const tabs = document.querySelectorAll('.category-tab');
             tabs.forEach(tab => {
@@ -286,35 +283,33 @@
                     // 更新当前分类并重新渲染
                     currentType = tab.dataset.type;
                     renderVideoList(currentType);
+                    // 清空搜索框
+                    document.getElementById('searchInput').value = '';
                 });
             });
         }
 
-        // 绑定搜索事件
+        // 绑定搜索事件（点击/回车）
         function bindSearch() {
             const searchBtn = document.getElementById('searchBtn');
             const searchInput = document.getElementById('searchInput');
 
-            // 点击搜索按钮
-            searchBtn.addEventListener('click', () => {
+            const doSearch = () => {
                 const keyword = searchInput.value.trim();
-                renderVideoList(currentType, keyword);
-            });
+                renderVideoList(currentType, keyword); // 在当前分类下搜索
+            };
 
-            // 回车搜索
+            searchBtn.addEventListener('click', doSearch);
             searchInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    const keyword = searchInput.value.trim();
-                    renderVideoList(currentType, keyword);
-                }
+                if (e.key === 'Enter') doSearch();
             });
         }
 
-        // 页面加载初始化
+        // 页面初始化
         window.onload = () => {
-            bindCategoryTabs();
-            bindSearch();
-            collectVideos();
+            bindCategoryTabs(); // 绑定分类切换
+            bindSearch(); // 绑定搜索
+            collectVideos(); // 加载视频列表
             // 加载失败重试
             document.getElementById('listError').addEventListener('click', collectVideos);
         };
