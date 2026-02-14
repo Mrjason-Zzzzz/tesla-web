@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LGCXS PRO 2026 (双模版)</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>LGCXS PRO 2026 (特斯拉适配版)</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="//unpkg.com/xgplayer@2.31.6/browser/index.js"></script>
@@ -15,7 +16,7 @@
         body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; height: 100vh; overflow: hidden; display: flex; }
         * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
 
-        /* 左侧导航 */
+        /* 左侧导航（特斯拉触控优化） */
         #sidebar { width: 240px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 30; }
         .brand { padding: 20px; font-size: 18px; font-weight: 800; border-bottom: 1px solid var(--border); display:flex; align-items:center; gap:8px; color: #fff; }
         .source-area { padding: 15px; border-bottom: 1px solid var(--border); }
@@ -26,59 +27,62 @@
         .group-item.active { background: var(--primary); color: #fff; font-weight: bold; }
         .badge { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 10px; }
 
-        /* 中间列表 */
+        /* 中间列表（特斯拉触控放大） */
         #middle { width: 280px; background: #1a1a1a; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
         .search-wrap { padding: 15px; border-bottom: 1px solid var(--border); }
-        #search { width: 100%; background: #2c2c2e; border: none; color: #fff; padding: 12px; border-radius: 8px; }
+        #search { width: 100%; background: #2c2c2e; border: none; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; }
         #channel-list { flex: 1; overflow-y: auto; padding: 10px; }
         
-        .channel-item { display: flex; align-items: center; padding: 12px; margin-bottom: 6px; background: rgba(255,255,255,0.05); border-radius: 8px; cursor: pointer; border-left: 3px solid transparent; }
+        .channel-item { display: flex; align-items: center; padding: 15px; margin-bottom: 6px; background: rgba(255,255,255,0.05); border-radius: 8px; cursor: pointer; border-left: 3px solid transparent; }
         .channel-item:hover { background: rgba(255,255,255,0.1); }
         .channel-item.active { background: #333; border-left-color: var(--primary); }
         .ch-logo { width: 40px; height: 40px; border-radius: 6px; background: #000; object-fit: contain; margin-right: 12px; flex-shrink: 0; }
         .ch-info { overflow: hidden; flex: 1; }
-        .ch-name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .ch-desc { font-size: 11px; color: #666; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ch-name { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ch-desc { font-size: 12px; color: #666; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        /* 右侧播放 */
+        /* 右侧播放（特斯拉全屏适配） */
         #stage { flex: 1; position: relative; background: #000; }
         #player { width: 100%; height: 100%; }
         
         #standby { position: absolute; inset: 0; background: radial-gradient(circle, #222 0%, #000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; }
         #qrcode-wrap { padding: 10px; background: #fff; border-radius: 12px; }
         .float-bar { position: absolute; bottom: 30px; right: 30px; display: flex; gap: 15px; z-index: 50; }
-        .float-btn { width: 48px; height: 48px; border-radius: 50%; background: rgba(50,50,50,0.8); backdrop-filter: blur(5px); border: 1px solid #555; color: #fff; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .float-btn { width: 56px; height: 56px; border-radius: 50%; background: rgba(50,50,50,0.8); backdrop-filter: blur(5px); border: 1px solid #555; color: #fff; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
-        /* 模态框 */
+        /* 模态框（特斯拉适配） */
         #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
-        .modal-box { background: #1c1c1e; width: 900px; max-height: 80vh; border-radius: 16px; border: 1px solid #333; display: flex; flex-direction: column; overflow: hidden; }
+        .modal-box { background: #1c1c1e; width: 90%; max-width: 900px; max-height: 80vh; border-radius: 16px; border: 1px solid #333; display: flex; flex-direction: column; overflow: hidden; }
         .modal-header { padding: 20px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: #252527; }
         .source-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; padding: 20px; overflow-y: auto; }
         .source-card { background: #2c2c2e; padding: 20px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; }
         .source-card:hover { border-color: var(--primary); background: #3a3a3c; }
         .tag { font-size: 10px; padding: 3px 6px; border-radius: 4px; background: #000; color: #aaa; margin-top: 5px; display: inline-block; }
 
-        /* 错误提示 */
-        #toast { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,59,48,0.9); padding: 10px 20px; border-radius: 30px; font-size: 14px; display: none; z-index: 200; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        /* 错误提示（特斯拉醒目提示） */
+        #toast { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,59,48,0.9); padding: 12px 24px; border-radius: 30px; font-size: 16px; display: none; z-index: 200; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
 
-        /* 手机端 */
+        /* 手机端遥控器 */
         #phone { display: none; height: 100vh; background: #eee; padding: 20px; color: #000; }
-        @media (max-width: 768px) { #sidebar, #middle { display: none; } }
+        @media (max-width: 768px) { 
+            #sidebar, #middle { display: none; } 
+            #phone { display: block; }
+        }
     </style>
 </head>
 <body>
 
     <div id="phone">
-        <h2>📲 遥控器</h2>
-        <input type="text" id="urlInput" placeholder="粘贴链接..." style="width:100%;padding:15px;border:1px solid #ccc;margin-bottom:10px;">
-        <button onclick="send()" style="width:100%;padding:15px;background:var(--primary);color:#fff;border:none;border-radius:8px;">投屏</button>
+        <h2>📲 特斯拉遥控器</h2>
+        <input type="text" id="urlInput" placeholder="粘贴M3U8链接/直播地址..." style="width:100%;padding:15px;border:1px solid #ccc;margin-bottom:10px;font-size:16px;">
+        <button onclick="send()" style="width:100%;padding:15px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:16px;">投屏到车机</button>
     </div>
 
     <div id="sidebar">
-        <div class="brand"><i class="ph-fill ph-car-profile"></i> LGCXS PRO</div>
+        <div class="brand"><i class="ph-fill ph-car-profile"></i> LGCXS PRO (特斯拉版)</div>
         <div class="source-area">
             <div class="source-select" onclick="toggleModal(true)">
-                <span id="cur-source">选择直播源</span>
+                <span id="cur-source">选择直播/点播源</span>
                 <i class="ph-bold ph-caret-down"></i>
             </div>
         </div>
@@ -87,7 +91,7 @@
 
     <div id="middle">
         <div class="search-wrap">
-            <input type="text" id="search" placeholder="搜索片名/频道..." onkeypress="if(event.keyCode==13) handleSearch()">
+            <input type="text" id="search" placeholder="搜索频道/影片名..." onkeypress="if(event.keyCode==13) handleSearch()">
         </div>
         <div id="channel-list"></div>
     </div>
@@ -98,8 +102,8 @@
         <div id="standby">
             <div id="qrcode-wrap"><div id="qrcode"></div></div>
             <div style="margin-top:20px;text-align:center;color:#aaa">
-                <h3>等待指令</h3>
-                <p style="font-size:12px">微信扫码 / 换源播放</p>
+                <h3>等待投屏指令</h3>
+                <p style="font-size:12px">微信扫码 / 选择资源播放</p>
             </div>
         </div>
         <div class="float-bar">
@@ -111,16 +115,24 @@
     <div id="modal" onclick="if(event.target.id==='modal')toggleModal(false)">
         <div class="modal-box">
             <div class="modal-header">
-                <span style="font-weight:bold">资源库 (直播+点播)</span>
-                <i class="ph-bold ph-x" style="cursor:pointer" onclick="toggleModal(false)"></i>
+                <span style="font-weight:bold; font-size:16px">资源库 (直播+点播)</span>
+                <i class="ph-bold ph-x" style="cursor:pointer; font-size:20px" onclick="toggleModal(false)"></i>
             </div>
             <div class="source-grid" id="source-grid"></div>
         </div>
     </div>
 
     <script>
-        // === 🚀 核心配置 ===
+        // === 🚀 核心配置（特斯拉适配版） ===
         const PROXY = 'https://corsproxy.io/?';
+        // 浏览器请求头（规避Cloudflare拦截）
+        const REQUEST_HEADERS = {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            'Referer': 'https://lgcxs.pro/',
+            'Cache-Control': 'no-cache'
+        };
 
         // === 📚 终极数据库 ===
         const DB = [
@@ -149,6 +161,21 @@
         let currentSourceType = "m3u"; // 'm3u' or 'cms'
         let currentApiUrl = "";
 
+        // === 🔥 特斯拉核心适配：D挡播放不暂停 ===
+        function bypassTeslaDRestriction() {
+            // 拦截车机触发的视频暂停事件
+            document.addEventListener('pause', function(e) {
+                if (e.target.tagName === 'VIDEO' && window.navigator.userAgent.includes('Tesla')) {
+                    e.preventDefault();
+                    e.target.play();
+                }
+            }, true);
+            // 强制开启inline播放（特斯拉车机要求）
+            const video = document.createElement('video');
+            video.setAttribute('playsinline', 'true');
+            video.setAttribute('webkit-playsinline', 'true');
+        }
+
         // 初始化
         const mqttBroker = 'wss://broker.emqx.io:8084/mqtt';
         const getUuid = () => Math.random().toString(36).substring(2, 9);
@@ -164,11 +191,16 @@
         }
 
         function initCar() {
+            // 初始化特斯拉D挡绕过逻辑
+            bypassTeslaDRestriction();
+            // 生成投屏二维码
             const remoteUrl = `${window.location.origin}${window.location.pathname}?mode=sender&id=${channelId}`;
-            new QRCode(document.getElementById("qrcode"), { text: remoteUrl, width: 160, height: 160 });
+            new QRCode(document.getElementById("qrcode"), { text: remoteUrl, width: 180, height: 180 });
+            // 渲染资源库
             renderModal();
-            // 默认加载第一个
-            loadSource(DB[1].items[0]); // 默认加载直播源，比较直观
+            // 默认加载第一个直播源
+            loadSource(DB[1].items[0]);
+            // 连接MQTT
             initMqtt();
         }
 
@@ -201,14 +233,15 @@
 
             try {
                 if (src.type === 'cms') {
-                    // CMS 模式：加载最新视频列表 (ac=list)
+                    // CMS 模式：加载最新视频列表
                     loadCMSList(src.url);
                 } else {
                     // M3U 模式：加载直播列表
                     loadM3UList(src.url);
                 }
             } catch (e) {
-                showToast("加载失败");
+                showToast("资源加载失败，请切换其他源");
+                console.error('加载资源失败：', e);
             }
         }
 
@@ -223,7 +256,12 @@
             const finalUrl = PROXY + encodeURIComponent(reqUrl);
 
             try {
-                const res = await fetch(finalUrl);
+                const res = await fetch(finalUrl, {
+                    headers: REQUEST_HEADERS,
+                    method: 'GET',
+                    credentials: 'omit',
+                    timeout: 20000
+                });
                 const text = await res.text();
                 // 解析 XML
                 const parser = new DOMParser();
@@ -239,7 +277,7 @@
                 const el = document.getElementById('channel-list');
                 el.innerHTML = '';
                 
-                // 清空左侧分组，CMS模式不需要分组，或者显示“最新/搜索”
+                // 清空左侧分组，显示搜索/最新标识
                 document.getElementById('group-list').innerHTML = `<div class="group-item active"><span>${keyword ? '搜索结果' : '最新更新'}</span></div>`;
 
                 for (let i = 0; i < videos.length; i++) {
@@ -262,19 +300,24 @@
                 }
 
             } catch (e) {
-                console.error(e);
-                showToast("CMS 接口请求失败");
+                console.error('CMS接口请求失败：', e);
+                showToast("资源站访问失败，请切换其他源");
             }
         }
 
         async function playCMSItem(id) {
-            showToast("正在获取播放地址...");
+            showToast("正在解析播放地址...");
             // 请求详情页获取播放地址
             const reqUrl = currentApiUrl + '?ac=detail&ids=' + id;
             const finalUrl = PROXY + encodeURIComponent(reqUrl);
 
             try {
-                const res = await fetch(finalUrl);
+                const res = await fetch(finalUrl, {
+                    headers: REQUEST_HEADERS,
+                    method: 'GET',
+                    credentials: 'omit',
+                    timeout: 20000
+                });
                 const text = await res.text();
                 const parser = new DOMParser();
                 const xmlDoc = parser.parseFromString(text, "text/xml");
@@ -310,7 +353,8 @@
                 }
 
             } catch (e) {
-                showToast("解析播放地址失败");
+                console.error('解析播放地址失败：', e);
+                showToast("解析失败，请换其他影片");
             }
         }
 
@@ -321,24 +365,34 @@
                 if (!url.includes('ghproxy') && !url.includes('aptv.app')) reqUrl = PROXY + encodeURIComponent(url);
             }
 
-            const res = await fetch(reqUrl);
-            const text = await res.text();
-            
-            allChannels = [];
-            const lines = text.split('\n');
-            let info = null;
-            lines.forEach(line => {
-                line = line.trim();
-                if (line.startsWith('#EXTINF')) {
-                    const g = line.match(/group-title="([^"]*)"/)?.[1] || '其他';
-                    const n = line.split(',').pop().trim();
-                    info = { name:n, group:g };
-                } else if (!line.startsWith('#') && line && info) {
-                    allChannels.push({...info, url:line});
-                    info = null;
-                }
-            });
-            renderGroups();
+            try {
+                const res = await fetch(reqUrl, {
+                    headers: REQUEST_HEADERS,
+                    method: 'GET',
+                    credentials: 'omit',
+                    timeout: 20000
+                });
+                const text = await res.text();
+                
+                allChannels = [];
+                const lines = text.split('\n');
+                let info = null;
+                lines.forEach(line => {
+                    line = line.trim();
+                    if (line.startsWith('#EXTINF')) {
+                        const g = line.match(/group-title="([^"]*)"/)?.[1] || '其他';
+                        const n = line.split(',').pop().trim();
+                        info = { name:n, group:g };
+                    } else if (!line.startsWith('#') && line && info) {
+                        allChannels.push({...info, url:line});
+                        info = null;
+                    }
+                });
+                renderGroups();
+            } catch (e) {
+                console.error('M3U加载失败：', e);
+                showToast("直播源加载失败，请切换其他源");
+            }
         }
 
         function renderGroups() {
@@ -375,7 +429,8 @@
         function renderM3UChannels(list) {
             const el = document.getElementById('channel-list');
             el.innerHTML = '';
-            list.slice(0, 100).forEach(c => {
+            // 特斯拉车机限制显示数量，避免滑动卡顿
+            list.slice(0, 150).forEach(c => {
                 const div = document.createElement('div');
                 div.className = 'channel-item';
                 div.innerHTML = `<div class="ch-logo" style="background:#333"></div><div class="ch-name">${c.name}</div>`;
@@ -386,7 +441,7 @@
 
         // === 公共逻辑 ===
         function handleSearch() {
-            const val = document.getElementById('search').value;
+            const val = document.getElementById('search').value.trim();
             if (!val) return;
 
             if (currentSourceType === 'cms') {
@@ -400,41 +455,97 @@
         }
 
         function play(url) {
+            // 再次触发特斯拉D挡绕过逻辑
+            bypassTeslaDRestriction();
+            
             document.getElementById('standby').style.display = 'none';
             document.getElementById('toast').style.display = 'none';
 
+            // HTTPS/HTTP混用警告
             if (location.protocol === 'https:' && url.startsWith('http:')) {
-                showToast("⚠️ HTTPS 混用警告，可能无法播放");
+                showToast("⚠️ 协议混用，可能无法播放");
             }
 
+            // 初始化播放器（特斯拉适配）
             if(!player) {
                 player = new Player({
-                    id:'player', url, playsinline:true, autoplay:true, fluid:true,
-                    plugins:[window.HlsJsPlugin], cssFullscreen:true, width:'100%', height:'100%'
+                    id:'player', 
+                    url, 
+                    playsinline:true, 
+                    autoplay:true, 
+                    fluid:true,
+                    plugins:[window.HlsJsPlugin], 
+                    cssFullscreen:true, 
+                    width:'100%', 
+                    height:'100%',
+                    // 特斯拉车机播放优化
+                    playbackRate: [0.8, 1, 1.2],
+                    volume: 0.7,
+                    muted: false
                 });
-                player.on('error', () => showToast("播放失败"));
+                // 播放错误处理
+                player.on('error', () => showToast("播放失败，请切换其他源/影片"));
+                // 强制全屏（特斯拉车机适配）
                 player.once('play', ()=>player.getCssFullscreen());
             } else {
-                player.src = url; player.reload(); player.play();
+                player.src = url; 
+                player.reload(); 
+                player.play();
             }
         }
 
+        // 提示框优化（特斯拉醒目显示）
         function showToast(msg) {
             const t = document.getElementById('toast');
-            t.innerText = msg; t.style.display = 'block';
-            setTimeout(()=>t.style.display='none', 3000);
+            t.innerText = msg; 
+            t.style.display = 'block';
+            setTimeout(()=>t.style.display='none', 4000);
         }
 
-        function toggleStandby() { const s = document.getElementById('standby'); s.style.display = s.style.display==='none'?'flex':'none'; }
-        function toggleModal(show) { document.getElementById('modal').style.display = show?'flex':'none'; }
+        // 待机界面切换
+        function toggleStandby() { 
+            const s = document.getElementById('standby'); 
+            s.style.display = s.style.display==='none'?'flex':'none'; 
+        }
 
+        // 模态框切换
+        function toggleModal(show) { 
+            document.getElementById('modal').style.display = show?'flex':'none'; 
+        }
+
+        // MQTT投屏初始化
         function initMqtt() {
-            const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-            client.on('connect', () => client.subscribe(topic));
-            client.on('message', (t, m) => play(m.toString()));
+            const client = mqtt.connect(mqttBroker, {
+                keepalive: 60,
+                reconnectPeriod: 1000,
+                timeout: 10000
+            });
+            
+            client.on('connect', () => {
+                client.subscribe(topic);
+                if (params.get('mode') === 'sender') showToast("已连接车机");
+            });
+            
+            client.on('message', (t, m) => {
+                const url = m.toString().trim();
+                if (url) play(url);
+            });
+            
+            client.on('error', (e) => {
+                console.error('MQTT连接失败：', e);
+                if (params.get('mode') === 'sender') showToast("投屏连接失败");
+            });
+
+            // 手机端发送投屏指令
             window.send = () => {
                 const u = document.getElementById('urlInput').value.trim();
-                if(u) { client.publish(topic, u); alert('已投送'); }
+                if(u) { 
+                    client.publish(topic, u); 
+                    showToast("投屏指令已发送");
+                    document.getElementById('urlInput').value = '';
+                } else {
+                    showToast("请输入播放链接");
+                }
             }
         }
     </script>
