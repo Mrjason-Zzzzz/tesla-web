@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LGCXS PRO (智能修复版)</title>
+    <title>LGCXS PRO 2026 (双模版)</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="//unpkg.com/xgplayer@2.31.6/browser/index.js"></script>
@@ -15,6 +15,7 @@
         body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; height: 100vh; overflow: hidden; display: flex; }
         * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
 
+        /* 左侧导航 */
         #sidebar { width: 240px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 30; }
         .brand { padding: 20px; font-size: 18px; font-weight: 800; border-bottom: 1px solid var(--border); display:flex; align-items:center; gap:8px; color: #fff; }
         .source-area { padding: 15px; border-bottom: 1px solid var(--border); }
@@ -25,6 +26,7 @@
         .group-item.active { background: var(--primary); color: #fff; font-weight: bold; }
         .badge { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 10px; }
 
+        /* 中间列表 */
         #middle { width: 280px; background: #1a1a1a; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
         .search-wrap { padding: 15px; border-bottom: 1px solid var(--border); }
         #search { width: 100%; background: #2c2c2e; border: none; color: #fff; padding: 12px; border-radius: 8px; }
@@ -34,8 +36,11 @@
         .channel-item:hover { background: rgba(255,255,255,0.1); }
         .channel-item.active { background: #333; border-left-color: var(--primary); }
         .ch-logo { width: 40px; height: 40px; border-radius: 6px; background: #000; object-fit: contain; margin-right: 12px; flex-shrink: 0; }
+        .ch-info { overflow: hidden; flex: 1; }
         .ch-name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ch-desc { font-size: 11px; color: #666; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+        /* 右侧播放 */
         #stage { flex: 1; position: relative; background: #000; }
         #player { width: 100%; height: 100%; }
         
@@ -44,27 +49,19 @@
         .float-bar { position: absolute; bottom: 30px; right: 30px; display: flex; gap: 15px; z-index: 50; }
         .float-btn { width: 48px; height: 48px; border-radius: 50%; background: rgba(50,50,50,0.8); backdrop-filter: blur(5px); border: 1px solid #555; color: #fff; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
+        /* 模态框 */
         #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
-        .modal-box { background: #1c1c1e; width: 800px; max-height: 80vh; border-radius: 16px; border: 1px solid #333; display: flex; flex-direction: column; overflow: hidden; }
+        .modal-box { background: #1c1c1e; width: 900px; max-height: 80vh; border-radius: 16px; border: 1px solid #333; display: flex; flex-direction: column; overflow: hidden; }
         .modal-header { padding: 20px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: #252527; }
         .source-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; padding: 20px; overflow-y: auto; }
         .source-card { background: #2c2c2e; padding: 20px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; }
         .source-card:hover { border-color: var(--primary); background: #3a3a3c; }
         .tag { font-size: 10px; padding: 3px 6px; border-radius: 4px; background: #000; color: #aaa; margin-top: 5px; display: inline-block; }
 
-        /* 状态提示条 */
-        #status-bar { 
-            position: absolute; top: 20px; left: 50%; transform: translateX(-50%); 
-            background: rgba(30,30,30,0.9); border: 1px solid #444; color: #fff; 
-            padding: 10px 20px; border-radius: 30px; font-size: 13px; display: none; 
-            z-index: 200; box-shadow: 0 10px 20px rgba(0,0,0,0.5); backdrop-filter: blur(5px);
-            align-items: center; gap: 8px;
-        }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
-        .status-dot.red { background: #ff453a; }
-        .status-dot.green { background: #30d158; }
-        .status-dot.yellow { background: #ffd60a; }
+        /* 错误提示 */
+        #toast { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,59,48,0.9); padding: 10px 20px; border-radius: 30px; font-size: 14px; display: none; z-index: 200; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
 
+        /* 手机端 */
         #phone { display: none; height: 100vh; background: #eee; padding: 20px; color: #000; }
         @media (max-width: 768px) { #sidebar, #middle { display: none; } }
     </style>
@@ -90,16 +87,13 @@
 
     <div id="middle">
         <div class="search-wrap">
-            <input type="text" id="search" placeholder="搜索频道..." oninput="handleSearch()">
+            <input type="text" id="search" placeholder="搜索片名/频道..." onkeypress="if(event.keyCode==13) handleSearch()">
         </div>
         <div id="channel-list"></div>
     </div>
 
     <div id="stage">
-        <div id="status-bar">
-            <div class="status-dot" id="status-dot"></div>
-            <span id="status-text">就绪</span>
-        </div>
+        <div id="toast">提示信息</div>
         <div id="player"></div>
         <div id="standby">
             <div id="qrcode-wrap"><div id="qrcode"></div></div>
@@ -117,7 +111,7 @@
     <div id="modal" onclick="if(event.target.id==='modal')toggleModal(false)">
         <div class="modal-box">
             <div class="modal-header">
-                <span style="font-weight:bold">直播源库</span>
+                <span style="font-weight:bold">资源库 (直播+点播)</span>
                 <i class="ph-bold ph-x" style="cursor:pointer" onclick="toggleModal(false)"></i>
             </div>
             <div class="source-grid" id="source-grid"></div>
@@ -125,21 +119,37 @@
     </div>
 
     <script>
-        // === 🚀 代理配置 ===
-        const PROXY_SERVER = 'https://corsproxy.io/?';
+        // === 🚀 核心配置 ===
+        const PROXY = 'https://corsproxy.io/?';
 
-        // === 📚 源数据 ===
+        // === 📚 终极数据库 ===
         const DB = [
-            { name: "YanG Gather", url: "https://tv.iill.top/m3u/Gather", desc: "推荐：频道全，包含IPv4", tag: "首选" },
-            { name: "Fanmingming IPv6", url: "https://live.fanmingming.com/tv/m3u/ipv6.m3u", desc: "极速，需IPv6网络", tag: "IPv6" },
-            { name: "APTV 官方源", url: "https://gh.aptv.app/https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u", desc: "稳定双栈", tag: "官方" },
-            { name: "虎牙直播", url: "https://cdn.jsdelivr.net/gh/Kimentanm/aptv@master/m3u/ya.m3u", desc: "电影/电视剧", tag: "影视" },
-            { name: "斗鱼一起看", url: "https://live.freetv.top/douyuyqk.m3u", desc: "经典影视轮播", tag: "影视" },
-            { name: "全球广播", url: "https://cdn.jsdelivr.net/gh/Kimentanm/aptv@master/m3u/radio.m3u", desc: "电台", tag: "音频" },
-            { name: "Gitee 520精选", url: "https://gitee.com/bighello/iptv2024/raw/master/all520.m3u", desc: "备用源", tag: "Gitee" }
+            {
+                title: "🎬 影视资源站 (点播/搜索)",
+                items: [
+                    { name: "IKUN 资源", url: "https://ikunzy.com/api.php/provide/vod", desc: "热门影视，更新快", tag: "点播", type: "cms" },
+                    { name: "极速资源", url: "https://jszyapi.com/api.php/provide/vod/from/jsm3u8", desc: "极速秒播", tag: "点播", type: "cms" },
+                    { name: "卧龙资源", url: "https://collect.wolongzy.cc/api.php/provide/vod", desc: "老牌资源站", tag: "点播", type: "cms" },
+                    { name: "百度资源", url: "https://api.apibdzy.com/api.php/provide/vod/from/dbm3u8", desc: "百度云采集", tag: "点播", type: "cms" },
+                    { name: "索尼资源", url: "https://suoniapi.com/api.php/provide/vod/from/snm3u8", desc: "综合影视", tag: "点播", type: "cms" }
+                ]
+            },
+            {
+                title: "📺 电视直播 (M3U)",
+                items: [
+                    { name: "APTV 官方源", url: "https://gh.aptv.app/https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u", desc: "IPv4/v6 双栈稳定", tag: "直播", type: "m3u" },
+                    { name: "Fanmingming IPv6", url: "https://live.fanmingming.com/tv/m3u/ipv6.m3u", desc: "极速无广", tag: "IPV6", type: "m3u" },
+                    { name: "YanG Gather", url: "https://tv.iill.top/m3u/Gather", desc: "超级聚合", tag: "海量", type: "m3u" },
+                    { name: "虎牙一起看", url: "https://live.freetv.top/huyayqk.m3u", desc: "24h电影轮播", tag: "轮播", type: "m3u" }
+                ]
+            }
         ];
 
         let player = null, allChannels = [], currentGroup = "全部";
+        let currentSourceType = "m3u"; // 'm3u' or 'cms'
+        let currentApiUrl = "";
+
+        // 初始化
         const mqttBroker = 'wss://broker.emqx.io:8084/mqtt';
         const getUuid = () => Math.random().toString(36).substring(2, 9);
         const params = new URLSearchParams(window.location.search);
@@ -157,54 +167,163 @@
             const remoteUrl = `${window.location.origin}${window.location.pathname}?mode=sender&id=${channelId}`;
             new QRCode(document.getElementById("qrcode"), { text: remoteUrl, width: 160, height: 160 });
             renderModal();
-            loadSource(DB[0]); // 默认加载第一个
+            // 默认加载第一个
+            loadSource(DB[1].items[0]); // 默认加载直播源，比较直观
             initMqtt();
         }
 
         function renderModal() {
             const grid = document.getElementById('source-grid');
-            DB.forEach(src => {
-                const div = document.createElement('div');
-                div.className = 'source-card';
-                div.innerHTML = `
-                    <div style="font-weight:bold;font-size:16px;color:#fff">${src.name}</div>
-                    <div style="font-size:12px;color:#888;margin:5px 0">${src.desc}</div>
-                    <span class="tag">${src.tag}</span>
-                `;
-                div.onclick = () => loadSource(src);
-                grid.appendChild(div);
+            DB.forEach(sec => {
+                grid.innerHTML += `<div style="grid-column:1/-1;color:#007aff;font-weight:bold;margin-top:10px;border-bottom:1px solid #333">${sec.title}</div>`;
+                sec.items.forEach(src => {
+                    const div = document.createElement('div');
+                    div.className = 'source-card';
+                    div.innerHTML = `
+                        <div style="font-weight:bold;font-size:16px;color:#fff">${src.name}</div>
+                        <div style="font-size:12px;color:#888;margin:5px 0">${src.desc}</div>
+                        <span class="tag" style="color:${src.type==='cms'?'#f39c12':'#2ecc71'}">${src.tag}</span>
+                    `;
+                    div.onclick = () => loadSource(src);
+                    grid.appendChild(div);
+                });
             });
         }
 
         async function loadSource(src) {
             toggleModal(false);
             document.getElementById('cur-source').innerText = src.name;
-            showStatus('yellow', '正在更新资源列表...');
+            document.getElementById('group-list').innerHTML = '<div style="padding:40px;text-align:center;color:#666">加载中...</div>';
             document.getElementById('channel-list').innerHTML = '';
             
-            try {
-                let url = src.url;
-                if (url.includes('github') || url.includes('gitee')) {
-                    if (!url.includes('ghproxy') && !url.includes('aptv.app')) {
-                        url = PROXY_SERVER + encodeURIComponent(url);
-                    }
-                }
+            currentSourceType = src.type;
+            currentApiUrl = src.url;
 
-                const res = await fetch(url);
-                if(!res.ok) throw new Error("List Load Failed");
-                const text = await res.text();
-                
-                parseM3u(text);
-                renderGroups();
-                showStatus('green', `已加载 ${allChannels.length} 个频道`);
-                setTimeout(hideStatus, 2000);
+            try {
+                if (src.type === 'cms') {
+                    // CMS 模式：加载最新视频列表 (ac=list)
+                    loadCMSList(src.url);
+                } else {
+                    // M3U 模式：加载直播列表
+                    loadM3UList(src.url);
+                }
             } catch (e) {
-                console.error(e);
-                showStatus('red', '资源列表加载失败，请换源');
+                showToast("加载失败");
             }
         }
 
-        function parseM3u(text) {
+        // === CMS 逻辑 (点播/采集) ===
+        async function loadCMSList(apiUrl, keyword = '') {
+            document.getElementById('channel-list').innerHTML = '<div style="text-align:center;padding:20px;color:#888">正在请求资源站...</div>';
+            
+            // 构造 XML API 请求
+            let reqUrl = apiUrl + '?ac=list&pg=1';
+            if (keyword) reqUrl = apiUrl + '?ac=list&wd=' + encodeURIComponent(keyword);
+
+            const finalUrl = PROXY + encodeURIComponent(reqUrl);
+
+            try {
+                const res = await fetch(finalUrl);
+                const text = await res.text();
+                // 解析 XML
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(text, "text/xml");
+                const videos = xmlDoc.getElementsByTagName("video");
+
+                if (videos.length === 0) {
+                    document.getElementById('channel-list').innerHTML = '<div style="text-align:center;padding:20px">未找到相关资源</div>';
+                    return;
+                }
+
+                // 渲染 CMS 列表
+                const el = document.getElementById('channel-list');
+                el.innerHTML = '';
+                
+                // 清空左侧分组，CMS模式不需要分组，或者显示“最新/搜索”
+                document.getElementById('group-list').innerHTML = `<div class="group-item active"><span>${keyword ? '搜索结果' : '最新更新'}</span></div>`;
+
+                for (let i = 0; i < videos.length; i++) {
+                    const v = videos[i];
+                    const name = v.getElementsByTagName("name")[0]?.childNodes[0]?.nodeValue || "未知";
+                    const type = v.getElementsByTagName("type")[0]?.childNodes[0]?.nodeValue || "影视";
+                    const id = v.getElementsByTagName("id")[0]?.childNodes[0]?.nodeValue;
+                    const time = v.getElementsByTagName("last")[0]?.childNodes[0]?.nodeValue || "";
+
+                    const div = document.createElement('div');
+                    div.className = 'channel-item';
+                    div.innerHTML = `
+                        <div class="ch-info">
+                            <div class="ch-name">${name}</div>
+                            <div class="ch-desc">${type} • ${time}</div>
+                        </div>
+                    `;
+                    div.onclick = () => playCMSItem(id);
+                    el.appendChild(div);
+                }
+
+            } catch (e) {
+                console.error(e);
+                showToast("CMS 接口请求失败");
+            }
+        }
+
+        async function playCMSItem(id) {
+            showToast("正在获取播放地址...");
+            // 请求详情页获取播放地址
+            const reqUrl = currentApiUrl + '?ac=detail&ids=' + id;
+            const finalUrl = PROXY + encodeURIComponent(reqUrl);
+
+            try {
+                const res = await fetch(finalUrl);
+                const text = await res.text();
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(text, "text/xml");
+                
+                // 提取播放地址 (dd 标签)
+                const dds = xmlDoc.getElementsByTagName("dd");
+                let playUrl = "";
+                
+                // 优先找 m3u8 的链接
+                for (let i = 0; i < dds.length; i++) {
+                    const flag = dds[i].getAttribute("flag");
+                    const content = dds[i].textContent;
+                    if (content.includes("m3u8")) {
+                        // 格式通常是 "第1集$url#第2集$url"
+                        const episodes = content.split('#');
+                        // 默认播第一集
+                        const firstEp = episodes[0].split('$');
+                        playUrl = firstEp.length > 1 ? firstEp[1] : firstEp[0];
+                        break;
+                    }
+                }
+
+                if (!playUrl && dds.length > 0) {
+                    // 如果没找到显式 m3u8，尝试拿第一个
+                    const content = dds[0].textContent.split('#')[0].split('$');
+                    playUrl = content.length > 1 ? content[1] : content[0];
+                }
+
+                if (playUrl) {
+                    play(playUrl);
+                } else {
+                    showToast("未找到可播放的 M3U8 链接");
+                }
+
+            } catch (e) {
+                showToast("解析播放地址失败");
+            }
+        }
+
+        // === M3U 逻辑 (直播) ===
+        async function loadM3UList(url) {
+            let reqUrl = url;
+            if (url.includes('github') || url.includes('gitee')) {
+                if (!url.includes('ghproxy') && !url.includes('aptv.app')) reqUrl = PROXY + encodeURIComponent(url);
+            }
+
+            const res = await fetch(reqUrl);
+            const text = await res.text();
+            
             allChannels = [];
             const lines = text.split('\n');
             let info = null;
@@ -212,14 +331,14 @@
                 line = line.trim();
                 if (line.startsWith('#EXTINF')) {
                     const g = line.match(/group-title="([^"]*)"/)?.[1] || '其他';
-                    const l = line.match(/tvg-logo="([^"]*)"/)?.[1] || '';
                     const n = line.split(',').pop().trim();
-                    info = { name:n, group:g, logo:l };
+                    info = { name:n, group:g };
                 } else if (!line.startsWith('#') && line && info) {
                     allChannels.push({...info, url:line});
                     info = null;
                 }
             });
+            renderGroups();
         }
 
         function renderGroups() {
@@ -228,11 +347,7 @@
             const list = document.getElementById('group-list');
             list.innerHTML = '';
             
-            const keys = Object.keys(groups).sort((a,b) => {
-                if(a.includes('央视')) return -1;
-                return 0;
-            });
-
+            const keys = Object.keys(groups).sort((a,b) => a.includes('央视') ? -1 : 1);
             renderGroupBtn('全部', allChannels.length, list);
             keys.forEach(k => renderGroupBtn(k, groups[k], list));
             selectGroup('全部');
@@ -253,108 +368,62 @@
 
         function selectGroup(name) {
             currentGroup = name;
-            document.getElementById('search').value = '';
             const list = name==='全部' ? allChannels : allChannels.filter(c=>c.group===name);
-            renderChannels(list);
+            renderM3UChannels(list);
         }
 
-        function renderChannels(list) {
+        function renderM3UChannels(list) {
             const el = document.getElementById('channel-list');
             el.innerHTML = '';
             list.slice(0, 100).forEach(c => {
                 const div = document.createElement('div');
                 div.className = 'channel-item';
-                const logo = c.logo || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNTU1IiBzdHJva2Utd2lkdGg9IjIiPjxyZWN0IHg9IjIiIHk9IjYiIHdpZHRoPSIyMCIgaGVpZ2h0PSIxMiIgcng9IjIiIHJ5PSIyIj48L3JlY3Q+PC9zdmc+';
-                div.innerHTML = `<img class="ch-logo" src="${logo}" onerror="this.src='${logo}'"><div class="ch-name">${c.name}</div>`;
-                div.onclick = () => playWithRetry(c.url);
+                div.innerHTML = `<div class="ch-logo" style="background:#333"></div><div class="ch-name">${c.name}</div>`;
+                div.onclick = () => play(c.url);
                 el.appendChild(div);
             });
         }
 
+        // === 公共逻辑 ===
         function handleSearch() {
-            const v = document.getElementById('search').value.toLowerCase();
-            if(!v) return selectGroup(currentGroup);
-            renderChannels(allChannels.filter(c => c.name.toLowerCase().includes(v)));
-        }
+            const val = document.getElementById('search').value;
+            if (!val) return;
 
-        // === 🚀 核心修复：自动重试与代理逻辑 ===
-        async function playWithRetry(url) {
-            document.getElementById('standby').style.display = 'none';
-            
-            // 1. 尝试直连
-            showStatus('yellow', '正在尝试直连...');
-            console.log("Try Direct:", url);
-            
-            // 如果是 HTTP 且页面是 HTTPS，直接提示
-            if (location.protocol === 'https:' && url.startsWith('http:')) {
-                showStatus('yellow', '检测到 HTTP 协议，自动启用代理...');
-                play(PROXY_SERVER + encodeURIComponent(url));
-                return;
-            }
-
-            // 尝试初始化播放器
-            play(url, true); // true 表示开启错误监听
-        }
-
-        function play(url, autoRetry = false) {
-            if(player) {
-                // 销毁旧实例，确保清洁
-                // xgplayer 切换 source 有时不如重建稳
-                // 这里我们简化：直接切源
-                player.src = url;
-                player.reload();
-                player.play();
-                // 更新错误监听器
-                updateErrorListener(url, autoRetry);
+            if (currentSourceType === 'cms') {
+                // CMS 模式：去服务器搜索
+                loadCMSList(currentApiUrl, val);
             } else {
-                player = new Player({
-                    id: 'player',
-                    url: url,
-                    playsinline: true,
-                    autoplay: true,
-                    fluid: true,
-                    plugins: [window.HlsJsPlugin],
-                    cssFullscreen: true,
-                    width: '100%',
-                    height: '100%',
-                    playbackRate: [1]
-                });
-                player.once('play', () => {
-                    showStatus('green', '播放成功');
-                    setTimeout(hideStatus, 3000);
-                    // 成功后进入全屏
-                    player.getCssFullscreen();
-                });
-                updateErrorListener(url, autoRetry);
+                // M3U 模式：本地搜索
+                const res = allChannels.filter(c => c.name.toLowerCase().includes(val.toLowerCase()));
+                renderM3UChannels(res);
             }
         }
 
-        function updateErrorListener(originalUrl, autoRetry) {
-            // 清除旧事件（xgplayer没有直接offAll，这里依赖新实例或覆盖）
-            // 简单处理：如果发生错误且允许重试
-            player.off('error');
-            player.once('error', (e) => {
-                console.error("Play Error:", e);
-                if (autoRetry && !originalUrl.includes(PROXY_SERVER)) {
-                    showStatus('red', '直连失败，正在切换代理线路...');
-                    const proxyUrl = PROXY_SERVER + encodeURIComponent(originalUrl);
-                    console.log("Retry with Proxy:", proxyUrl);
-                    play(proxyUrl, false); // false 防止死循环
-                } else {
-                    showStatus('red', '播放失败：源失效或网络不支持');
-                }
-            });
+        function play(url) {
+            document.getElementById('standby').style.display = 'none';
+            document.getElementById('toast').style.display = 'none';
+
+            if (location.protocol === 'https:' && url.startsWith('http:')) {
+                showToast("⚠️ HTTPS 混用警告，可能无法播放");
+            }
+
+            if(!player) {
+                player = new Player({
+                    id:'player', url, playsinline:true, autoplay:true, fluid:true,
+                    plugins:[window.HlsJsPlugin], cssFullscreen:true, width:'100%', height:'100%'
+                });
+                player.on('error', () => showToast("播放失败"));
+                player.once('play', ()=>player.getCssFullscreen());
+            } else {
+                player.src = url; player.reload(); player.play();
+            }
         }
 
-        function showStatus(color, text) {
-            const bar = document.getElementById('status-bar');
-            const dot = document.getElementById('status-dot');
-            const txt = document.getElementById('status-text');
-            bar.style.display = 'flex';
-            dot.className = `status-dot ${color}`;
-            txt.innerText = text;
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg; t.style.display = 'block';
+            setTimeout(()=>t.style.display='none', 3000);
         }
-        function hideStatus() { document.getElementById('status-bar').style.display = 'none'; }
 
         function toggleStandby() { const s = document.getElementById('standby'); s.style.display = s.style.display==='none'?'flex':'none'; }
         function toggleModal(show) { document.getElementById('modal').style.display = show?'flex':'none'; }
@@ -362,7 +431,7 @@
         function initMqtt() {
             const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
             client.on('connect', () => client.subscribe(topic));
-            client.on('message', (t, m) => playWithRetry(m.toString()));
+            client.on('message', (t, m) => play(m.toString()));
             window.send = () => {
                 const u = document.getElementById('urlInput').value.trim();
                 if(u) { client.publish(topic, u); alert('已投送'); }
