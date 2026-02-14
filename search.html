@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>特斯拉观影搜索</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #000; color: #fff; font-family: sans-serif; padding: 20px; }
+        .api-select { margin-bottom: 15px; padding: 10px; background: #111; border-radius: 8px; }
+        .api-select label { font-size: 14px; margin-right: 10px; }
+        .api-select select { padding: 5px 10px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px; }
+        .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
+        #searchInput { 
+            flex: 1; 
+            padding: 12px 15px; 
+            border: 1px solid #333; 
+            border-radius: 8px; 
+            background: #111; 
+            color: #fff; 
+            font-size: 16px; 
+            height: 48px; /* 特斯拉触控优化：放大输入框 */
+        }
+        #searchBtn { 
+            padding: 0 20px; 
+            border: none; 
+            border-radius: 8px; 
+            background: #0071e3; 
+            color: #fff; 
+            font-size: 16px; 
+            cursor: pointer; 
+            height: 48px; /* 特斯拉触控优化：放大按钮 */
+        }
+        #loading { text-align: center; color: #999; font-size: 16px; display: none; }
+        #resultList { margin-top: 20px; display: none; }
+        .result-item { 
+            background: #111; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin-bottom: 10px; 
+            cursor: pointer; 
+            touch-action: manipulation; /* 特斯拉触控优化：消除点击延迟 */
+        }
+        .result-title { font-size: 18px; margin-bottom: 8px; }
+        .result-desc { font-size: 14px; color: #999; }
+        .error { text-align: center; color: #ff4444; font-size: 16px; margin-top: 20px; display: none; }
+    </style>
+</head>
+<body>
+    <!-- 解析源选择（兼容你提供的JSON配置） -->
+    <div class="api-select">
+        <label>选择解析源：</label>
+        <select id="apiSelector">
+            <option value="http://110.42.70.165:12121/api.php/provide/vod/?ac=detail&wd=">官链|Mac</option>
+            <option value="https://caiji.maotaizy.cc/api.php/provide/vod/?ac=detail&wd=">茅台|zyz</option>
+            <option value="https://cj.rycjapi.com/api.php/provide/vod/?ac=detail&wd=">如意|zyz</option>
+            <option value="https://jszyapi.com/api.php/provide/vod/?ac=detail&wd=">极速|zyz</option>
+            <option value="https://iqiyizyapi.com/api.php/provide/vod/?ac=detail&wd=">暴风|zyz</option>
+        </select>
+    </div>
+
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="输入视频名称（如：哪吒、流浪地球）">
+        <button id="searchBtn">搜索</button>
+    </div>
+    <div id="loading">正在搜索视频...</div>
+    <div id="error">搜索失败，请切换解析源重试</div>
+    <div id="resultList"></div>
+
+    <script>
+        // 播放页地址（对应index.html）
+        const PLAY_PAGE = "index.html";
+
+        // 跨域代理：解决Vercel前端调用API的跨域问题
+        function getProxyUrl(url) {
+            return `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+        }
+
+        // 核心：搜索视频（适配特斯拉车机网络）
+        async function searchVideo(keyword) {
+            if (!keyword) {
+                alert("请输入视频名称");
+                return;
+            }
+
+            // 显示加载状态
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('resultList').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+
+            try {
+                // 获取选中的解析源
+                const selectedApi = document.getElementById('apiSelector').value;
+                // 拼接搜索URL
+                const rawSearchUrl = selectedApi + encodeURIComponent(keyword);
+                // 跨域代理访问
+                const proxyUrl = getProxyUrl(rawSearchUrl);
+                
+                // 发起请求（带特斯拉兼容的UA）
+                const response = await fetch(proxyUrl, {
+                    headers: {
+                        'User-Agent': "Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)",
+                        'Cache-Control': 'no-cache' // 避免特斯拉车机缓存旧数据
+                    },
+                    timeout: 10000 // 超时10秒，适配车机网络
+                });
+
+                const result = await response.json();
+                // 解析API返回的视频数据
+                const apiData = JSON.parse(result.contents);
+                const videoList = apiData.list || apiData.data || apiData.vod_list || [];
+
+                // 无结果处理
+                if (videoList.length === 0) {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('error').innerText = "未找到相关视频，可切换解析源重试";
+                    document.getElementById('error').style.display = 'block';
+                    return;
+                }
+
+                // 渲染搜索结果
+                renderResult(videoList);
+            } catch (e) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').innerText = `搜索失败：${e.message}\n建议切换解析源`;
+                document.getElementById('error').style.display = 'block';
+            }
+        }
+
+        // 渲染搜索结果（特斯拉触控友好）
+        function renderResult(videoList) {
+            document.getElementById('loading').style.display = 'none';
+            const resultList = document.getElementById('resultList');
+            resultList.innerHTML = "";
+
+            videoList.forEach(item => {
+                // 提取M3U8播放地址（兼容多线路格式）
+                const playUrl = item.play_url || item.vod_play_url || item.url || "";
+                if (!playUrl) return;
+
+                // 提取第一个有效M3U8地址
+                let m3u8Url = playUrl.split("$")[1] || playUrl;
+                if (!m3u8Url.includes('.m3u8')) return;
+
+                // 创建结果项
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'result-item';
+                // 点击跳转到播放页（特斯拉触控无延迟）
+                itemDiv.onclick = () => {
+                    window.location.href = `${PLAY_PAGE}?url=${encodeURIComponent(m3u8Url)}`;
+                };
+
+                // 视频标题
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'result-title';
+                titleDiv.innerText = item.name || item.vod_name || item.title || "未知视频";
+
+                // 视频分类
+                const descDiv = document.createElement('div');
+                descDiv.className = 'result-desc';
+                descDiv.innerText = item.type || item.vod_type || "无分类";
+
+                itemDiv.appendChild(titleDiv);
+                itemDiv.appendChild(descDiv);
+                resultList.appendChild(itemDiv);
+            });
+
+            resultList.style.display = 'block';
+        }
+
+        // 绑定搜索按钮事件
+        document.getElementById('searchBtn').addEventListener('click', () => {
+            const keyword = document.getElementById('searchInput').value.trim();
+            searchVideo(keyword);
+        });
+
+        // 回车搜索（特斯拉键盘适配）
+        document.getElementById('searchInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const keyword = e.target.value.trim();
+                searchVideo(keyword);
+            }
+        });
+    </script>
+</body>
+</html>
