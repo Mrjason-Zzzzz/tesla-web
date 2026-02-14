@@ -73,9 +73,11 @@
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
 
     <script>
-        // 🔥 金鹰资源接口配置（按你的要求，支持去掉s）
+        // 🔥 金鹰资源接口配置（加入CORS代理）
         const CONFIG = {
-            // 优先用JSON采集接口（解析更简单），采集失败自动切换HTTP
+            // CORS代理地址
+            proxy: "https://api.allorigins.win/get?url=",
+            // 优先用JSON采集接口（解析更简单）
             collectApi: "https://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json",
             // M3U8解析接口
             parseApi: "https://hd.iapijy.com/play?url=",
@@ -99,30 +101,32 @@
             video.setAttribute('webkit-playsinline', 'true');
         }
 
-        // 采集视频列表
+        // 采集视频列表（通过CORS代理）
         async function collectVideos() {
             document.getElementById('listLoading').style.display = 'block';
             document.getElementById('videoList').style.display = 'none';
             document.getElementById('listError').style.display = 'none';
 
             try {
-                // 先调用HTTPS采集接口
-                let response = await fetch(CONFIG.collectApi, { timeout: 10000 });
+                // 先调用HTTPS采集接口（通过代理）
+                let response = await fetch(CONFIG.proxy + encodeURIComponent(CONFIG.collectApi), { timeout: 15000 });
                 if (!response.ok) throw new Error('HTTPS采集失败，切换HTTP');
                 
                 let data = await response.json();
-                if (!data.list || data.list.length === 0) throw new Error('无数据，切换备用接口');
+                let parsedData = JSON.parse(data.contents); // 解析代理返回的内容
+                if (!parsedData.list || parsedData.list.length === 0) throw new Error('无数据，切换备用接口');
 
-                allVideos = data.list;
+                allVideos = parsedData.list;
                 renderVideoList('all'); // 默认显示全部
             } catch (e) {
-                // 切换备用接口（去掉s）
+                // 切换备用接口（去掉s，通过代理）
                 try {
-                    const backupResponse = await fetch(CONFIG.backupCollectApi, { timeout: 10000 });
+                    const backupResponse = await fetch(CONFIG.proxy + encodeURIComponent(CONFIG.backupCollectApi), { timeout: 15000 });
                     const backupData = await backupResponse.json();
-                    if (!backupData.list || backupData.list.length === 0) throw new Error('备用接口无数据');
+                    const parsedBackupData = JSON.parse(backupData.contents);
+                    if (!parsedBackupData.list || parsedBackupData.list.length === 0) throw new Error('备用接口无数据');
 
-                    allVideos = backupData.list;
+                    allVideos = parsedBackupData.list;
                     renderVideoList('all');
                 } catch (backupErr) {
                     document.getElementById('listLoading').style.display = 'none';
@@ -171,7 +175,7 @@
             list.style.display = 'block';
         }
 
-        // 解析并播放视频
+        // 解析并播放视频（通过CORS代理）
         async function playVideo(vodId, vodName) {
             document.getElementById('playLoading').style.display = 'block';
             document.getElementById('videoList').style.display = 'none';
@@ -182,9 +186,9 @@
             bypassTeslaDRestriction();
 
             try {
-                // 拼接解析地址（根据接口逻辑，vod_id对应播放地址，这里假设解析接口需要完整播放链接，实际可根据接口调整）
-                // 若解析接口需要其他参数，可修改这里的url拼接逻辑
-                const parseUrl = `${CONFIG.parseApi}${encodeURIComponent(`https://jyzyapi.com/provide/vod/play/${vodId}.m3u8`)}`;
+                // 拼接解析地址（通过代理）
+                const playUrl = `https://jyzyapi.com/provide/vod/play/${vodId}.m3u8`;
+                const parseUrl = CONFIG.parseApi + encodeURIComponent(playUrl);
                 
                 // 销毁旧播放器
                 if (dp) dp.destroy();
