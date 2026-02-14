@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LGCXS PRO 诊断版</title>
+    <title>LGCXS PRO (全源回归版)</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="//unpkg.com/xgplayer@2.31.6/browser/index.js"></script>
@@ -11,44 +11,62 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <style>
-        :root { --primary: #007aff; --bg: #000; --panel: #121212; --text: #fff; }
+        :root { --primary: #007aff; --bg: #000; --panel: #111; --text: #eee; --border: #333; }
         body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; height: 100vh; overflow: hidden; display: flex; }
         * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
 
         /* 左侧 */
-        #sidebar { width: 220px; background: var(--panel); border-right: 1px solid #333; display: flex; flex-direction: column; z-index: 20; }
-        .header { padding: 20px; font-weight: bold; border-bottom: 1px solid #333; display:flex; align-items:center; gap:8px; }
-        #group-list { flex: 1; overflow-y: auto; padding: 10px; }
-        .group-btn { padding: 12px; margin-bottom: 5px; border-radius: 6px; cursor: pointer; color: #888; display:flex; justify-content:space-between; }
-        .group-btn.active { background: var(--primary); color: #fff; }
+        #sidebar { width: 240px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 30; }
+        .brand { padding: 20px; font-size: 18px; font-weight: 800; border-bottom: 1px solid var(--border); display:flex; align-items:center; gap:8px; color: #fff; }
+        .source-area { padding: 15px; border-bottom: 1px solid var(--border); }
+        .source-select { width: 100%; background: #222; color: #fff; padding: 12px; border-radius: 8px; border: 1px solid #444; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
         
-        /* 底部诊断区 */
-        .debug-area { padding: 10px; border-top: 1px solid #333; }
-        .test-btn { width: 100%; background: #222; color: #4cd964; border: 1px solid #4cd964; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+        #group-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .group-item { padding: 12px; margin-bottom: 4px; border-radius: 6px; cursor: pointer; color: #aaa; display: flex; justify-content: space-between; font-size: 14px; }
+        .group-item.active { background: var(--primary); color: #fff; font-weight: bold; }
+        .badge { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 10px; }
 
         /* 中间 */
-        #middle { width: 260px; background: #1a1a1a; border-right: 1px solid #333; display: flex; flex-direction: column; }
-        .search-box { padding: 10px; border-bottom: 1px solid #333; }
-        input { width: 100%; background: #000; border: 1px solid #333; color: #fff; padding: 10px; border-radius: 6px; }
+        #middle { width: 280px; background: #1a1a1a; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        .search-wrap { padding: 15px; border-bottom: 1px solid var(--border); }
+        #search { width: 100%; background: #2c2c2e; border: none; color: #fff; padding: 12px; border-radius: 8px; }
         #channel-list { flex: 1; overflow-y: auto; padding: 10px; }
-        .channel-item { padding: 12px; margin-bottom: 5px; background: rgba(255,255,255,0.05); border-radius: 6px; cursor: pointer; display:flex; align-items:center; gap:10px; }
-        .channel-item.active { border-left: 3px solid var(--primary); background: #333; }
-        .ch-logo { width: 30px; height: 30px; object-fit: contain; background:#000; border-radius:4px; }
+        
+        .channel-item { display: flex; align-items: center; padding: 12px; margin-bottom: 6px; background: rgba(255,255,255,0.05); border-radius: 8px; cursor: pointer; border-left: 3px solid transparent; }
+        .channel-item:hover { background: rgba(255,255,255,0.1); }
+        .channel-item.active { background: #333; border-left-color: var(--primary); }
+        .ch-logo { width: 40px; height: 40px; border-radius: 6px; background: #000; object-fit: contain; margin-right: 12px; flex-shrink: 0; }
+        .ch-name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         /* 右侧 */
         #stage { flex: 1; position: relative; background: #000; }
         #player { width: 100%; height: 100%; }
         
-        /* 错误提示层 */
-        #error-log { 
-            position: absolute; top: 10px; left: 10px; right: 10px; 
-            background: rgba(255,0,0,0.8); color: #fff; padding: 10px; 
-            border-radius: 8px; font-size: 12px; display: none; z-index: 100; pointer-events: none;
-        }
+        #standby { position: absolute; inset: 0; background: radial-gradient(circle, #222 0%, #000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; }
+        #qrcode-wrap { padding: 10px; background: #fff; border-radius: 12px; }
+        .float-bar { position: absolute; bottom: 30px; right: 30px; display: flex; gap: 15px; z-index: 50; }
+        .float-btn { width: 48px; height: 48px; border-radius: 50%; background: rgba(50,50,50,0.8); backdrop-filter: blur(5px); border: 1px solid #555; color: #fff; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+        /* 模态框 */
+        #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
+        .modal-box { background: #1c1c1e; width: 900px; max-height: 85vh; border-radius: 16px; border: 1px solid #333; display: flex; flex-direction: column; overflow: hidden; }
+        .modal-header { padding: 20px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: #252527; }
+        
+        /* 调整源列表布局 */
+        .source-container { padding: 20px; overflow-y: auto; }
+        .section-title { color: var(--primary); font-size: 14px; font-weight: bold; margin: 20px 0 10px 0; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        .source-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; }
+        
+        .source-card { background: #2c2c2e; padding: 15px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; display:flex; gap:12px; align-items: flex-start; }
+        .source-card:hover { border-color: var(--primary); background: #3a3a3c; }
+        .s-icon { width:36px; height:36px; background:#444; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+        .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #000; color: #aaa; margin-top: 5px; display: inline-block; }
+
+        /* 错误提示 */
+        #toast { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,59,48,0.9); padding: 10px 20px; border-radius: 30px; font-size: 14px; display: none; z-index: 200; }
 
         /* 手机端 */
         #phone { display: none; height: 100vh; background: #eee; padding: 20px; color: #000; }
-
         @media (max-width: 768px) { #sidebar, #middle { display: none; } }
     </style>
 </head>
@@ -56,49 +74,100 @@
 
     <div id="phone">
         <h2>📲 遥控器</h2>
-        <input type="text" id="urlInput" placeholder="粘贴链接..." style="background:#fff;border:1px solid #ccc;color:#000;">
-        <button onclick="send()" style="width:100%;margin-top:10px;padding:15px;background:var(--primary);color:#fff;border:none;border-radius:8px;">投屏</button>
+        <input type="text" id="urlInput" placeholder="粘贴链接..." style="width:100%;padding:15px;border:1px solid #ccc;margin-bottom:10px;">
+        <button onclick="send()" style="width:100%;padding:15px;background:var(--primary);color:#fff;border:none;border-radius:8px;">投屏</button>
     </div>
 
     <div id="sidebar">
-        <div class="header">LGCXS DIAGNOSIS</div>
-        <div id="group-list"></div>
-        <div class="debug-area">
-            <button class="test-btn" onclick="runSelfTest()">🧪 播放器自检 (点我测试)</button>
-            <div style="margin-top:5px;font-size:10px;color:#666;text-align:center">点击上方按钮，如果能播说明代码没问题</div>
+        <div class="brand"><i class="ph-fill ph-car-profile"></i> LGCXS PRO</div>
+        <div class="source-area">
+            <div class="source-select" onclick="toggleModal(true)">
+                <div style="display:flex;flex-direction:column;overflow:hidden">
+                    <span style="font-size:10px;color:#888">当前源</span>
+                    <span id="cur-source" style="font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">请选择...</span>
+                </div>
+                <i class="ph-bold ph-caret-down"></i>
+            </div>
         </div>
+        <div id="group-list"></div>
     </div>
 
     <div id="middle">
-        <div class="search-box"><input type="text" id="search" placeholder="搜索..." oninput="search()"></div>
+        <div class="search-wrap">
+            <input type="text" id="search" placeholder="搜索..." oninput="handleSearch()">
+        </div>
         <div id="channel-list"></div>
     </div>
 
     <div id="stage">
-        <div id="error-log"></div>
+        <div id="toast">播放失败</div>
         <div id="player"></div>
+        <div id="standby">
+            <div id="qrcode-wrap"><div id="qrcode"></div></div>
+            <div style="margin-top:20px;text-align:center;color:#aaa">
+                <h3>等待指令</h3>
+                <p style="font-size:12px">微信扫码 / 换源播放</p>
+            </div>
+        </div>
+        <div class="float-bar">
+            <div class="float-btn" onclick="toggleStandby()"><i class="ph-bold ph-qr-code"></i></div>
+            <div class="float-btn" onclick="toggleModal(true)" style="background:var(--primary)"><i class="ph-bold ph-swap"></i></div>
+        </div>
+    </div>
+
+    <div id="modal" onclick="if(event.target.id==='modal')toggleModal(false)">
+        <div class="modal-box">
+            <div class="modal-header">
+                <span style="font-weight:bold">全网直播源库</span>
+                <i class="ph-bold ph-x" style="cursor:pointer" onclick="toggleModal(false)"></i>
+            </div>
+            <div class="source-container" id="source-grid"></div>
+        </div>
     </div>
 
     <script>
-        const PROXY = 'https://cors.isteed.cc/';
-        
-        // 核心测试源：HLS.js 官方测试源 (绝对稳定)
-        const TEST_URL = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
+        // === 🚀 核心配置 ===
+        const PROXY = 'https://corsproxy.io/?'; 
 
-        // 你的源列表
-        const SOURCES = [
-            { name: "APTV 官方 (稳定)", url: "https://gh.aptv.app/https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u" },
-            { name: "YanG Gather", url: "https://tv.iill.top/m3u/Gather" },
-            { name: "fanmingming IPv6", url: "https://live.fanmingming.com/tv/m3u/ipv6.m3u" },
-            { name: "虎牙直播", url: "https://cdn.jsdelivr.net/gh/Kimentanm/aptv@master/m3u/ya.m3u" }
+        // === 📚 终极数据库 (全员回归) ===
+        const DB = [
+            {
+                title: "🌟 官方 & 稳定 (车机首选)",
+                items: [
+                    { name: "APTV 官方源", url: "https://gh.aptv.app/https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u", desc: "最稳的源，IPv4/IPv6混合", tag: "稳定" },
+                    { name: "YanG Gather", url: "https://tv.iill.top/m3u/Gather", desc: "超级聚合，线路丰富", tag: "推荐" },
+                    { name: "Fanmingming IPv6", url: "https://live.fanmingming.com/tv/m3u/ipv6.m3u", desc: "纯IPv6，极速无广", tag: "极速" }
+                ]
+            },
+            {
+                title: "📦 海量资源 (你的旧爱)",
+                items: [
+                    { name: "Gitee 520精选", url: "https://gitee.com/bighello/iptv2024/raw/master/all520.m3u", desc: "国内访问快，综合稳定", tag: "Gitee" },
+                    { name: "AutoIPTV 酒店源", url: "https://mirror.ghproxy.com/https://raw.githubusercontent.com/cymz6/AutoIPTV-Hotel/main/lives.m3u", desc: "自动采集，包含277+频道", tag: "自动" },
+                    { name: "BigBigGrandG", url: "https://raw.githubusercontent.com/BigBigGrandG/IPTV-URL/release/Gather.m3u", desc: "海量聚合", tag: "Github" },
+                    { name: "直播熊猫", url: "https://gitee.com/bighello/iptv2024/raw/master/panda.m3u", desc: "熊猫采集源", tag: "聚合" }
+                ]
+            },
+            {
+                title: "🎬 平台 & 影视",
+                items: [
+                    { name: "虎牙一起看", url: "https://live.freetv.top/huyayqk.m3u", desc: "24h电影电视剧", tag: "影视" },
+                    { name: "斗鱼一起看", url: "https://live.freetv.top/douyuyqk.m3u", desc: "经典老片轮播", tag: "影视" },
+                    { name: "B站直播", url: "https://www.goodiptv.club/bililive.m3u", desc: "UP主直播流", tag: "娱乐" },
+                    { name: "精选 IPv6", url: "https://mirror.ghproxy.com/https://raw.githubusercontent.com/Ftindy/IPTV-URL/main/IPV6.m3u", desc: "Ftindy 维护", tag: "IPV6" }
+                ]
+            }
         ];
 
-        let player = null;
-        let allChannels = [];
-        let currentGroup = "全部";
-
-        // 入口
+        let player = null, allChannels = [], currentGroup = "全部";
+        
+        // MQTT & 路由逻辑
+        const mqttBroker = 'wss://broker.emqx.io:8084/mqtt';
+        const getUuid = () => Math.random().toString(36).substring(2, 9);
         const params = new URLSearchParams(window.location.search);
+        const channelId = params.get('id') || getUuid();
+        const topic = `lgcxs/car/${channelId}`;
+
         if (params.get('mode') === 'sender') {
             document.getElementById('phone').style.display = 'block';
             initMqtt();
@@ -107,42 +176,69 @@
         }
 
         function initCar() {
-            // 生成二维码逻辑省略，同前...
+            const remoteUrl = `${window.location.origin}${window.location.pathname}?mode=sender&id=${channelId}`;
+            new QRCode(document.getElementById("qrcode"), { text: remoteUrl, width: 160, height: 160 });
+            renderModal();
+            // 默认加载最稳的
+            loadSource(DB[0].items[0]);
             initMqtt();
-            // 默认加载第一个源
-            loadSource(SOURCES[0]); 
-            renderGroups(); // 初始渲染菜单
         }
 
-        // 🧪 自检功能
-        window.runSelfTest = function() {
-            showError("正在进行自检... 尝试播放测试视频");
-            play(TEST_URL);
-            setTimeout(() => {
-                showError("自检完成：如果你看到画面，说明播放器正常。问题出在直播源上。", "#4cd964");
-            }, 3000);
+        function renderModal() {
+            const container = document.getElementById('source-grid');
+            container.innerHTML = '';
+            
+            DB.forEach(sec => {
+                container.innerHTML += `<div class="section-title">${sec.title}</div>`;
+                const grid = document.createElement('div');
+                grid.className = 'source-grid';
+                
+                sec.items.forEach(src => {
+                    const div = document.createElement('div');
+                    div.className = 'source-card';
+                    div.innerHTML = `
+                        <div class="s-icon"><i class="ph-fill ph-television-simple"></i></div>
+                        <div style="flex:1">
+                            <div style="font-weight:bold;color:#fff">${src.name}</div>
+                            <div style="font-size:12px;color:#888;margin-top:2px">${src.desc}</div>
+                            <span class="tag">${src.tag}</span>
+                        </div>
+                    `;
+                    div.onclick = () => loadSource(src);
+                    grid.appendChild(div);
+                });
+                container.appendChild(grid);
+            });
         }
 
-        // 加载源
         async function loadSource(src) {
-            document.getElementById('channel-list').innerHTML = '<div style="padding:20px;text-align:center">加载中...</div>';
+            toggleModal(false);
+            document.getElementById('cur-source').innerText = src.name;
+            document.getElementById('group-list').innerHTML = '<div style="padding:40px;text-align:center;color:#666">正在拉取...</div>';
+            document.getElementById('channel-list').innerHTML = '';
             
             try {
                 let url = src.url;
-                // 代理策略：Github/Gitee 强制走代理
-                if (url.includes('github') || url.includes('gitee')) {
-                    if (!url.includes('ghproxy') && !url.includes('aptv.app')) {
-                        url = PROXY + url;
-                    }
+                
+                // === 智能代理逻辑 (关键) ===
+                // 你的很多源是 HTTP 的，或者跨域的，这里强制走代理中转
+                // 排除已经是 HTTPS 且支持跨域的少数源
+                const needsProxy = url.includes('gitee') || url.includes('github') || url.startsWith('http:');
+                
+                if (needsProxy && !url.includes('corsproxy')) {
+                    // 如果不是已经包含代理的链接，加上代理
+                    url = PROXY + encodeURIComponent(url);
                 }
 
                 const res = await fetch(url);
-                if (!res.ok) throw new Error("网络请求失败");
+                if(!res.ok) throw new Error("加载失败");
                 const text = await res.text();
+                
                 parseM3u(text);
                 renderGroups();
             } catch (e) {
-                showError(`加载源失败: ${e.message}。请尝试点击“自检”按钮。`);
+                console.error(e);
+                document.getElementById('group-list').innerHTML = `<div style="padding:20px;text-align:center;color:#f00">加载失败<br><span style="font-size:12px">源可能已失效或被拦截</span></div>`;
             }
         }
 
@@ -165,353 +261,13 @@
         }
 
         function renderGroups() {
-            const list = document.getElementById('group-list');
-            list.innerHTML = '';
-            
-            // 渲染源切换按钮
-            SOURCES.forEach(s => {
-                const btn = document.createElement('div');
-                btn.className = 'group-btn';
-                btn.innerText = "📡 " + s.name;
-                btn.onclick = () => loadSource(s);
-                list.appendChild(btn);
-            });
-
-            // 分割线
-            list.innerHTML += '<hr style="border:0;border-top:1px solid #333;margin:10px 0">';
-
-            // 渲染频道分组
-            const groups = {};
-            allChannels.forEach(c => groups[c.group] = (groups[c.group]||0)+1);
-            
-            Object.keys(groups).forEach(g => {
-                const btn = document.createElement('div');
-                btn.className = 'group-btn';
-                btn.innerHTML = `<span>${g}</span><span>${groups[g]}</span>`;
-                btn.onclick = (e) => {
-                    document.querySelectorAll('.group-btn').forEach(i=>i.classList.remove('active'));
-                    e.currentTarget.classList.add('active');
-                    renderChannels(g);
-                };
-                list.appendChild(btn);
-            });
-        }
-
-        function renderChannels(group) {
-            const list = document.getElementById('channel-list');
-            list.innerHTML = '';
-            const items = allChannels.filter(c => c.group === group);
-            
-            items.slice(0, 100).forEach(c => {
-                const div = document.createElement('div');
-                div.className = 'channel-item';
-                div.innerHTML = `<img class="ch-logo" src="${c.logo}" onerror="this.style.display='none'"><span>${c.name}</span>`;
-                div.onclick = () => play(c.url);
-                list.appendChild(div);
-            });
-        }
-
-        // 🔎 搜索
-        window.search = function() {
-            const val = document.getElementById('search').value.toLowerCase();
-            const list = document.getElementById('channel-list');
-            list.innerHTML = '';
-            const items = allChannels.filter(c => c.name.toLowerCase().includes(val)).slice(0, 100);
-            items.forEach(c => {
-                const div = document.createElement('div');
-                div.className = 'channel-item';
-                div.innerHTML = `<span>${c.name}</span> <span style="font-size:10px;color:#666">${c.group}</span>`;
-                div.onclick = () => play(c.url);
-                list.appendChild(div);
-            });
-        }
-
-        // ▶️ 播放核心
-        function play(url) {
-            document.getElementById('error-log').style.display = 'none'; // 隐藏旧错误
-            
-            // 混合内容检查：如果网页是HTTPS但视频是HTTP
-            if (window.location.protocol === 'https:' && url.startsWith('http:')) {
-                showError("⚠️ 安全阻断：无法在 HTTPS 网页播放 HTTP 视频。请尝试使用支持 HTTPS 的源（如 APTV 官方源）。");
-                // 尝试用代理转为 HTTPS
-                console.log("尝试使用代理升级协议...");
-                url = PROXY + url;
-            }
-
-            if (!player) {
-                player = new Player({
-                    id: 'player',
-                    url: url,
-                    playsinline: true,
-                    autoplay: true,
-                    fluid: true,
-                    plugins: [window.HlsJsPlugin],
-                    cssFullscreen: true,
-                    width: '100%',
-                    height: '100%'
-                });
-                
-                // 监听错误
-                player.on('error', (e) => {
-                    console.error(e);
-                    showError("❌ 播放失败：源可能已失效或跨域被拦截。请尝试切换其他源。");
-                });
-
-                player.once('play', () => player.getCssFullscreen());
-            } else {
-                player.src = url;
-                player.reload();
-                player.play();
-            }
-        }
-
-        function showError(msg, color = 'rgba(255,0,0,0.8)') {
-            const el = document.getElementById('error-log');
-            el.innerText = msg;
-            el.style.backgroundColor = color;
-            el.style.display = 'block';
-        }
-
-        // MQTT 初始化 (省略部分代码，同前，只为了保持完整性)
-        function initMqtt() {
-            const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-            const topic = 'lgcxs/car/test'; // 简化的topic方便测试
-            client.on('connect', () => client.subscribe(topic));
-            client.on('message', (t, m) => play(m.toString()));
-            window.send = () => client.publish(topic, document.getElementById('urlInput').value);
-        }
-    </script>
-</body>
-</html><!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LGCXS PRO (稳定版)</title>
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="//unpkg.com/xgplayer@2.31.6/browser/index.js"></script>
-    <script src="//unpkg.com/xgplayer-hls.js/dist/index.min.js"></script>
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
-
-    <style>
-        :root { --primary: #0a84ff; --bg: #000; --panel: #111; --text: #eee; --border: #333; }
-        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; height: 100vh; overflow: hidden; display: flex; }
-        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
-
-        /* 左侧导航 */
-        #sidebar { width: 240px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 30; }
-        .brand { padding: 20px; font-size: 18px; font-weight: 800; border-bottom: 1px solid var(--border); display:flex; align-items:center; gap:8px; color: #fff; }
-        .source-area { padding: 15px; border-bottom: 1px solid var(--border); }
-        .source-select { width: 100%; background: #222; color: #fff; padding: 12px; border-radius: 8px; border: 1px solid #444; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-        
-        #group-list { flex: 1; overflow-y: auto; padding: 10px; }
-        .group-item { padding: 12px; margin-bottom: 4px; border-radius: 6px; cursor: pointer; color: #aaa; display: flex; justify-content: space-between; font-size: 14px; }
-        .group-item.active { background: var(--primary); color: #fff; font-weight: bold; }
-        .badge { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 10px; }
-
-        /* 中间列表 */
-        #middle { width: 280px; background: #1a1a1a; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-        .search-wrap { padding: 15px; border-bottom: 1px solid var(--border); }
-        #search { width: 100%; background: #2c2c2e; border: none; color: #fff; padding: 12px; border-radius: 8px; }
-        #channel-list { flex: 1; overflow-y: auto; padding: 10px; }
-        
-        .channel-item { display: flex; align-items: center; padding: 12px; margin-bottom: 6px; background: rgba(255,255,255,0.05); border-radius: 8px; cursor: pointer; border-left: 3px solid transparent; }
-        .channel-item:hover { background: rgba(255,255,255,0.1); }
-        .channel-item.active { background: #333; border-left-color: var(--primary); }
-        .ch-logo { width: 40px; height: 40px; border-radius: 6px; background: #000; object-fit: contain; margin-right: 12px; flex-shrink: 0; }
-        .ch-name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-        /* 右侧播放 */
-        #stage { flex: 1; position: relative; background: #000; }
-        #player { width: 100%; height: 100%; }
-        
-        #standby { position: absolute; inset: 0; background: radial-gradient(circle, #222 0%, #000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; }
-        #qrcode-wrap { padding: 10px; background: #fff; border-radius: 12px; }
-        .float-bar { position: absolute; bottom: 30px; right: 30px; display: flex; gap: 15px; z-index: 50; }
-        .float-btn { width: 48px; height: 48px; border-radius: 50%; background: rgba(50,50,50,0.8); backdrop-filter: blur(5px); border: 1px solid #555; color: #fff; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-
-        /* 模态框 */
-        #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
-        .modal-box { background: #1c1c1e; width: 800px; max-height: 80vh; border-radius: 16px; border: 1px solid #333; display: flex; flex-direction: column; overflow: hidden; }
-        .modal-header { padding: 20px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: #252527; }
-        .source-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; padding: 20px; overflow-y: auto; }
-        .source-card { background: #2c2c2e; padding: 20px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; }
-        .source-card:hover { border-color: var(--primary); background: #3a3a3c; }
-        .tag { font-size: 10px; padding: 3px 6px; border-radius: 4px; background: #000; color: #aaa; margin-top: 5px; display: inline-block; }
-
-        /* 错误提示 */
-        #toast { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,59,48,0.9); padding: 10px 20px; border-radius: 30px; font-size: 14px; display: none; z-index: 200; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
-
-        /* 手机端 */
-        #phone { display: none; height: 100vh; background: #eee; padding: 20px; color: #000; }
-        @media (max-width: 768px) { #sidebar, #middle { display: none; } }
-    </style>
-</head>
-<body>
-
-    <div id="phone">
-        <h2>📲 遥控器</h2>
-        <input type="text" id="urlInput" placeholder="粘贴链接..." style="width:100%;padding:15px;border:1px solid #ccc;margin-bottom:10px;">
-        <button onclick="send()" style="width:100%;padding:15px;background:var(--primary);color:#fff;border:none;border-radius:8px;">投屏</button>
-    </div>
-
-    <div id="sidebar">
-        <div class="brand"><i class="ph-fill ph-car-profile"></i> LGCXS PRO</div>
-        <div class="source-area">
-            <div class="source-select" onclick="toggleModal(true)">
-                <span id="cur-source">选择直播源</span>
-                <i class="ph-bold ph-caret-down"></i>
-            </div>
-        </div>
-        <div id="group-list"></div>
-    </div>
-
-    <div id="middle">
-        <div class="search-wrap">
-            <input type="text" id="search" placeholder="搜索频道..." oninput="handleSearch()">
-        </div>
-        <div id="channel-list"></div>
-    </div>
-
-    <div id="stage">
-        <div id="toast">播放失败</div>
-        <div id="player"></div>
-        <div id="standby">
-            <div id="qrcode-wrap"><div id="qrcode"></div></div>
-            <div style="margin-top:20px;text-align:center;color:#aaa">
-                <h3>等待指令</h3>
-                <p style="font-size:12px">扫码投屏 / 左侧选台</p>
-            </div>
-        </div>
-        <div class="float-bar">
-            <div class="float-btn" onclick="toggleStandby()"><i class="ph-bold ph-qr-code"></i></div>
-            <div class="float-btn" onclick="toggleModal(true)" style="background:var(--primary)"><i class="ph-bold ph-swap"></i></div>
-        </div>
-    </div>
-
-    <div id="modal" onclick="if(event.target.id==='modal')toggleModal(false)">
-        <div class="modal-box">
-            <div class="modal-header">
-                <span style="font-weight:bold">直播源库 (HTTPS安全版)</span>
-                <i class="ph-bold ph-x" style="cursor:pointer" onclick="toggleModal(false)"></i>
-            </div>
-            <div class="source-grid" id="source-grid"></div>
-        </div>
-    </div>
-
-    <script>
-        // === 🚀 核心配置：使用强力 CORS 代理 ===
-        // 这个代理比之前的更稳，能穿透大部分 M3U8 列表的跨域限制
-        const PROXY = 'https://corsproxy.io/?';
-
-        // === 📚 经过严格筛选的“车机能播”源 ===
-        // 只保留了 HTTPS 和聚合类，去掉了必死的 HTTP 地方台
-        const DB = [
-            { name: "APTV 官方维护", url: "https://gh.aptv.app/https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u", desc: "最稳的源，IPv4/IPv6混合，HTTPS", tag: "首选" },
-            { name: "Fanmingming IPv6", url: "https://live.fanmingming.com/tv/m3u/ipv6.m3u", desc: "纯IPv6，速度极快，无广告", tag: "极速" },
-            { name: "YanG Gather", url: "https://tv.iill.top/m3u/Gather", desc: "超级聚合，包含虎牙斗鱼", tag: "海量" },
-            { name: "YueChan 4K", url: "https://gh.aptv.app/https://raw.githubusercontent.com/YueChan/Live/main/APTV.m3u", desc: "主打高画质", tag: "画质" }
-        ];
-
-        let player = null, allChannels = [], currentGroup = "全部";
-        
-        // 初始化逻辑
-        const mqttBroker = 'wss://broker.emqx.io:8084/mqtt';
-        const getUuid = () => Math.random().toString(36).substring(2, 9);
-        const params = new URLSearchParams(window.location.search);
-        const channelId = params.get('id') || getUuid();
-        const topic = `lgcxs/car/${channelId}`;
-
-        if (params.get('mode') === 'sender') {
-            document.getElementById('phone').style.display = 'block';
-            initMqtt();
-        } else {
-            initCar();
-        }
-
-        function initCar() {
-            const remoteUrl = `${window.location.origin}${window.location.pathname}?mode=sender&id=${channelId}`;
-            new QRCode(document.getElementById("qrcode"), { text: remoteUrl, width: 160, height: 160 });
-            renderModal();
-            loadSource(DB[0]); // 默认加载第一个
-            initMqtt();
-        }
-
-        // 渲染源列表
-        function renderModal() {
-            const grid = document.getElementById('source-grid');
-            DB.forEach(src => {
-                const div = document.createElement('div');
-                div.className = 'source-card';
-                div.innerHTML = `
-                    <div style="font-weight:bold;font-size:16px;color:#fff">${src.name}</div>
-                    <div style="font-size:12px;color:#888;margin:5px 0">${src.desc}</div>
-                    <span class="tag">${src.tag}</span>
-                `;
-                div.onclick = () => loadSource(src);
-                grid.appendChild(div);
-            });
-        }
-
-        // 加载并解析源
-        async function loadSource(src) {
-            toggleModal(false);
-            document.getElementById('cur-source').innerText = src.name;
-            document.getElementById('group-list').innerHTML = '<div style="padding:20px;text-align:center;color:#666">正在获取列表...</div>';
-            
-            try {
-                // 拼接代理地址
-                let targetUrl = src.url;
-                if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
-                
-                // 使用 corsproxy.io 进行中转
-                const finalUrl = PROXY + encodeURIComponent(targetUrl);
-                
-                const res = await fetch(finalUrl);
-                if(!res.ok) throw new Error("代理请求失败");
-                const text = await res.text();
-                
-                parseM3u(text);
-                renderGroups();
-            } catch (e) {
-                console.error(e);
-                document.getElementById('group-list').innerHTML = '<div style="padding:20px;text-align:center;color:#ff3b30">列表加载失败<br>请切换其他源</div>';
-            }
-        }
-
-        function parseM3u(text) {
-            allChannels = [];
-            const lines = text.split('\n');
-            let info = null;
-            lines.forEach(line => {
-                line = line.trim();
-                if (line.startsWith('#EXTINF')) {
-                    const g = line.match(/group-title="([^"]*)"/)?.[1] || '其他';
-                    const l = line.match(/tvg-logo="([^"]*)"/)?.[1] || '';
-                    const n = line.split(',').pop().trim();
-                    info = { name:n, group:g, logo:l };
-                } else if (!line.startsWith('#') && line && info) {
-                    // 关键过滤：如果是HTTP链接，尝试升级为HTTPS，或者标记
-                    let streamUrl = line;
-                    // 这里不做强制过滤，交给播放器处理错误
-                    allChannels.push({...info, url:streamUrl});
-                    info = null;
-                }
-            });
-        }
-
-        function renderGroups() {
             const groups = {};
             allChannels.forEach(c => groups[c.group] = (groups[c.group]||0)+1);
             const list = document.getElementById('group-list');
             list.innerHTML = '';
             
-            // 排序逻辑
-            const keys = Object.keys(groups).sort((a,b) => {
-                if(a.includes('央视')) return -1;
-                return 0;
-            });
+            // 简单排序：央视在前
+            const keys = Object.keys(groups).sort((a,b) => a.includes('央视') ? -1 : 1);
 
             renderGroupBtn('全部', allChannels.length, list);
             keys.forEach(k => renderGroupBtn(k, groups[k], list));
@@ -541,16 +297,16 @@
         function renderChannels(list) {
             const el = document.getElementById('channel-list');
             el.innerHTML = '';
-            // 限制渲染数量，防止卡顿
-            list.slice(0, 100).forEach(c => {
+            // 懒加载前150个
+            list.slice(0, 150).forEach(c => {
                 const div = document.createElement('div');
                 div.className = 'channel-item';
-                const logo = c.logo || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNTU1IiBzdHJva2Utd2lkdGg9IjIiPjxyZWN0IHg9IjIiIHk9IjYiIHdpZHRoPSIyMCIgaGVpZ2h0PSIxMiIgcng9IjIiIHJ5PSIyIj48L3JlY3Q+PC9zdmc+';
+                const logo = c.logo || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNDQ0IiBzdHJva2Utd2lkdGg9IjIiPjxyZWN0IHg9IjIiIHk9IjYiIHdpZHRoPSIyMCIgaGVpZ2h0PSIxMiIgcng9IjIiIHJ5PSIyIj48L3JlY3Q+PC9zdmc+';
                 div.innerHTML = `<img class="ch-logo" src="${logo}" onerror="this.src='${logo}'"><div class="ch-name">${c.name}</div>`;
                 div.onclick = () => play(c.url);
                 el.appendChild(div);
             });
-            if(list.length > 100) el.innerHTML += `<div style="text-align:center;color:#666;font-size:12px;padding:10px">仅显示前100个，请使用搜索</div>`;
+            if(list.length > 150) el.innerHTML += `<div style="text-align:center;color:#666;font-size:12px;padding:10px">仅显示前150个...</div>`;
         }
 
         function handleSearch() {
@@ -564,12 +320,11 @@
             document.getElementById('standby').style.display = 'none';
             document.getElementById('toast').style.display = 'none';
 
-            // 混合内容自动修复：如果当前页面是HTTPS，但视频是HTTP，尝试代理
+            // 自动代理播放：如果视频是HTTP，尝试走代理 (Beta功能)
+            // 注意：视频流走代理可能会卡，但总比播不出来好
             if (location.protocol === 'https:' && url.startsWith('http:')) {
-                console.log("检测到不安全内容，尝试代理...");
-                // 这里不自动加代理，因为视频流走代理太费流量且不稳定
-                // 而是弹窗提示
-                showToast("⚠️ 正在播放 HTTP 视频，可能会被浏览器拦截");
+                // 暂时只提示，不强制代理视频流，因为免费代理跑不动视频流
+                showToast("⚠️ 正在尝试播放不安全(HTTP)资源");
             }
 
             if(!player) {
@@ -577,7 +332,7 @@
                     id:'player', url, playsinline:true, autoplay:true, fluid:true,
                     plugins:[window.HlsJsPlugin], cssFullscreen:true, width:'100%', height:'100%'
                 });
-                player.on('error', () => showToast("❌ 播放失败：源失效或网络限制"));
+                player.on('error', () => showToast("❌ 播放失败：源失效或被拦截"));
                 player.once('play', ()=>player.getCssFullscreen());
             } else {
                 player.src = url; player.reload(); player.play();
@@ -587,7 +342,7 @@
         function showToast(msg) {
             const t = document.getElementById('toast');
             t.innerText = msg; t.style.display = 'block';
-            setTimeout(() => t.style.display = 'none', 4000);
+            setTimeout(()=>t.style.display='none', 3000);
         }
 
         function toggleStandby() { const s = document.getElementById('standby'); s.style.display = s.style.display==='none'?'flex':'none'; }
